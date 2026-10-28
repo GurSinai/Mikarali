@@ -33,8 +33,11 @@ const fullDate = ev => ev.label || slotLabel(ev);
 const norm = s => s.replace(/["'״׳`()\-–:,.]/g, ' ').replace(/\s+/g, ' ').trim();
 const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const eventsOf = gate => EVENTS.filter(e => gate === 0 || e.gates.includes(gate));
-const gateName = g => g === 0 ? 'כל השערים' : `שער ${g}: ${window.GATES[g]}`;
+// שער 8 (שנות חיים של אישים) הוא מקבץ נפרד, ולכן לא נכלל ב"כל השערים".
+const PEOPLE = 8;
+const ALL_GATES = [1, 2, 3, 4, 5, 6, 7, PEOPLE, 0];
+const eventsOf = gate => EVENTS.filter(e => gate === 0 ? !e.gates.includes(PEOPLE) : e.gates.includes(gate));
+const gateName = g => g === 0 ? 'כל השערים' : g === PEOPLE ? window.GATES[g] : `שער ${g}: ${window.GATES[g]}`;
 
 // ───────── שמירת התקדמות (localStorage) ─────────
 const STORE_KEY = 'mikraot-timeline-v1';
@@ -87,13 +90,13 @@ function setNav(which) {
 // ───────── מסך בית ─────────
 function renderHome() {
   setNav('home');
-  const gates = [1, 2, 3, 4, 5, 6, 7, 0];
+  const gates = ALL_GATES;
   app.innerHTML = `
     <section class="panel">
       <h2>בחר שער</h2>
       <div class="chips">${gates.map(g => `
         <button class="chip ${settings.gate === g ? 'on' : ''}" data-gate="${g}">
-          <b>${g === 0 ? 'הכל' : g}</b><span>${g === 0 ? 'כל השערים' : window.GATES[g]}</span>
+          <b>${g === 0 ? 'הכל' : g === PEOPLE ? 'אישים' : g}</b><span>${g === 0 ? 'כל השערים' : window.GATES[g]}</span>
           <small>${eventsOf(g).length} אירועים</small>
         </button>`).join('')}
       </div>
@@ -364,7 +367,7 @@ function showRoundResult(correct, total) {
 function renderStats() {
   setNav('stats');
   const pct = x => Math.round(100 * x.correct / x.total);
-  const gates = [1, 2, 3, 4, 5, 6, 7, 0];
+  const gates = ALL_GATES;
   const cell = (g, l) => {
     const s = store.sessions.filter(x => x.gate === g && x.level === l);
     if (!s.length) return '<td class="na">–</td>';
@@ -379,7 +382,7 @@ function renderStats() {
     .join('');
   const recent = store.sessions.slice(-15).reverse().map(x => `
     <li><span>${new Date(x.ts).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-    <span>${esc(x.gate === 0 ? 'כל השערים' : 'שער ' + x.gate)} · ${LEVELS[x.level].name}</span><b>${x.correct}/${x.total} (${pct(x)}%)</b></li>`).join('');
+    <span>${esc(x.gate === 0 ? 'כל השערים' : x.gate === PEOPLE ? window.GATES[x.gate] : 'שער ' + x.gate)} · ${LEVELS[x.level].name}</span><b>${x.correct}/${x.total} (${pct(x)}%)</b></li>`).join('');
 
   app.innerHTML = `
     <section class="panel">
@@ -387,7 +390,7 @@ function renderStats() {
       <p class="hint">הציון הגדול הוא של הסבב האחרון. ההתקדמות נשמרת בדפדפן הזה בלבד.</p>
       <div class="tablewrap"><table class="stats">
         <thead><tr><th>שער</th>${[1, 2, 3].map(l => `<th>${l}. ${LEVELS[l].name}</th>`).join('')}</tr></thead>
-        <tbody>${gates.map(g => `<tr><th>${g === 0 ? 'הכל' : `${g}. ${window.GATES[g]}`}</th>${[1, 2, 3].map(l => cell(g, l)).join('')}</tr>`).join('')}</tbody>
+        <tbody>${gates.map(g => `<tr><th>${g === 0 ? 'הכל' : g === PEOPLE ? window.GATES[g] : `${g}. ${window.GATES[g]}`}</th>${[1, 2, 3].map(l => cell(g, l)).join('')}</tr>`).join('')}</tbody>
       </table></div>
     </section>
     <section class="panel two">
