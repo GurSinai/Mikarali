@@ -52,7 +52,7 @@ function recordAnswer(ev, right) {
   right ? s.r++ : s.w++;
 }
 function recordSession(gate, level, correct, total) {
-  store.sessions.push({ ts: Date.now(), gate, level, correct, total });
+  store.sessions.push({ ts: Date.now(), gate, level, correct, total, dur: stopTimer() });
   saveStore();
 }
 
@@ -131,6 +131,7 @@ function bestBadge(gate, level) {
 }
 
 function startRound() {
+  startTimer();
   const { gate, level } = settings;
   const size = settings.size || 9999;
   if (level === 3) return renderLevel3(gate, pickEvents(gate, size, false));
@@ -140,7 +141,7 @@ function startRound() {
 }
 
 function roundHeader(gate, level, extra = '') {
-  return `<div class="roundhead"><div><small>${esc(gateName(gate))}</small><h2>${LEVELS[level].name}</h2></div>${extra}</div>`;
+  return `<div class="roundhead"><div><small>${esc(gateName(gate))}</small><h2>${LEVELS[level].name}</h2></div><div class="rh-side">${timerHtml()}${extra}</div></div>`;
 }
 
 // ───────── שלב 1: גרירת אירועים לשנים ─────────
@@ -355,7 +356,7 @@ function showRoundResult(correct, total) {
   el.innerHTML = `
     <div class="score ${pct >= 80 ? 'good' : pct >= 50 ? 'mid' : 'bad'}">
       <div class="big">${pct}%</div>
-      <div>${correct} מתוך ${total} נכונות</div>
+      <div>${correct} מתוך ${total} נכונות · ⏱ ${fmtDur(lastDur)}</div>
       <div class="actions"><button class="primary" id="again">סבב נוסף</button><button id="home">חזרה לבחירה</button></div>
     </div>`;
   el.querySelector('#again').onclick = startRound;
@@ -382,7 +383,7 @@ function renderStats() {
     .join('');
   const recent = store.sessions.slice(-15).reverse().map(x => `
     <li><span>${new Date(x.ts).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-    <span>${esc(x.gate === 0 ? 'כל השערים' : x.gate === PEOPLE ? window.GATES[x.gate] : 'שער ' + x.gate)} · ${LEVELS[x.level].name}</span><b>${x.correct}/${x.total} (${pct(x)}%)</b></li>`).join('');
+    <span>${esc(x.gate === 0 ? 'כל השערים' : x.gate === PEOPLE ? window.GATES[x.gate] : 'שער ' + x.gate)} · ${LEVELS[x.level].name}</span><b>${x.correct}/${x.total} (${pct(x)}%)${durText(x)}</b></li>`).join('');
 
   app.innerHTML = `
     <section class="panel">
