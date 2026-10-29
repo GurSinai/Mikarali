@@ -328,3 +328,8 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
 .spouses { font-size: .82rem; color: var(--muted); }
 .spouses a { color: var(--accent); }
 .leafrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 38px; }
+
+/* סמל בה"ד 1 בכותרת – התמונה עגולה על רקע לבן, לכן חותכים לעיגול */
+.brand { display: inline-flex; align-items: center; white-space: pre; }
+.emblem { width: 34px; height: 32px; object-fit: cover; clip-path: circle(47% at 50% 50%); flex: none; margin-inline-end: 10px; }
+.navbtn { white-space: nowrap; }
