@@ -333,3 +333,4 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
 .brand { display: inline-flex; align-items: center; white-space: pre; }
 .emblem { width: 34px; height: 32px; object-fit: cover; clip-path: circle(47% at 50% 50%); flex: none; margin-inline-end: 10px; }
 .navbtn { white-space: nowrap; }
+.backlink { display: inline-block; margin-bottom: 10px; color: var(--accent); text-decoration: none; font-weight: 500; }
