@@ -3,22 +3,51 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ציר הזמן – מקראות ישראל</title>
+  <title>מקראות ישראל – תרגול</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <svg class="flagbg" aria-hidden="true" viewBox="0 0 220 160" preserveAspectRatio="xMidYMid meet"><rect class="flag-field" width="220" height="160"/><rect class="flag-blue" y="15" width="220" height="25"/><rect class="flag-blue" y="120" width="220" height="25"/><g class="flag-star" fill="none" stroke-width="5.5"><path d="M110 47 L138.6 96.5 L81.4 96.5 Z"/><path d="M110 113 L81.4 63.5 L138.6 63.5 Z"/></g></svg>
   <header class="topbar">
-    <a class="brand" href="#" data-nav="home">ציר הזמן <span>· מקראות ישראל</span></a>
-    <nav>
-      <button class="navbtn" data-nav="home">תרגול</button>
-      <button class="navbtn" data-nav="stats">ההתקדמות שלי</button>
-    </nav>
+    <a class="brand" href="./">מקראות ישראל <span>· תרגול</span></a>
   </header>
-  <main id="app"></main>
-  <script src="events.js"></script>
-  <script src="app.js"></script>
+  <main class="landing">
+    <h1>מה מתרגלים היום?</h1>
+    <p class="hint">שני מצבי תרגול לפי הסיכום ומאגר השאלות ממבחני מקראות ישראל.</p>
+    <div class="choices">
+      <a class="choice" href="timeline.html">
+        <span class="choice-icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48"><path d="M6 24h36" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="12" cy="24" r="4" fill="currentColor"/><circle cx="24" cy="24" r="4" fill="currentColor"/><circle cx="36" cy="24" r="4" fill="currentColor"/><path d="M12 14v4M24 30v4M36 14v4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+        </span>
+        <b>תרגול ציר זמן</b>
+        <p>ממקמים אירועים על ציר הזמן לפי שער, בשלוש רמות קושי.</p>
+        <em class="badge" id="tl-summary"></em>
+      </a>
+      <a class="choice" href="questions.html">
+        <span class="choice-icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="3"/><path d="M18 19a6 6 0 1 1 8 5.6c-1.3.5-2 1.5-2 2.9V29" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="24" cy="35" r="2" fill="currentColor"/></svg>
+        </span>
+        <b>תרגול שאלות</b>
+        <p>שאלות ממבחנים קודמים: מקראות ישראל, נשק, עזרה ראשונה, קשר, תחקיר ומפה.</p>
+        <em class="badge" id="q-summary"></em>
+      </a>
+    </div>
+  </main>
+  <script>
+    // סיכום קצר של ההתקדמות בכל אחד מהמצבים
+    function read(key) { try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; } }
+    const tl = read('mikraot-timeline-v1').sessions || [];
+    const qs = read('mikraot-questions-v1').sessions || [];
+    const sum = s => {
+      if (!s.length) return 'עוד לא תרגלת';
+      const last = s[s.length - 1];
+      return `${s.length} סבבים · אחרון ${Math.round(100 * last.correct / last.total)}%`;
+    };
+    document.getElementById('tl-summary').textContent = sum(tl);
+    document.getElementById('q-summary').textContent = sum(qs);
+  </script>
 </body>
 </html>
