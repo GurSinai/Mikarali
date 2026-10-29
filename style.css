@@ -362,8 +362,8 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
 .pm .sym { fill: var(--accent); stroke: var(--surface); stroke-width: 1.2; transition: transform .15s; transform-box: fill-box; transform-origin: center; }
 .pm:hover .sym { transform: scale(1.3); }
 .pm .lbl { display: none; font-size: 8.5px; font-weight: 700; fill: var(--ink); direction: rtl; text-anchor: start; paint-order: stroke; stroke: var(--land); stroke-width: 2.5px; stroke-linejoin: round; pointer-events: none; }
-.pm.done { cursor: default; }
-.pm.done .lbl { display: inline; }
+.pm.done .lbl { display: inline; opacity: 0; transition: opacity 1.2s; }
+.pm.done.showlbl .lbl, .pm.done.keep .lbl { opacity: 1; transition: opacity .2s; }
 .pm.done.ok .sym { fill: var(--good); }
 .pm.done.late .sym { fill: var(--bad); }
 .pm.no .sym { fill: var(--bad); animation: shake .35s; }
@@ -403,3 +403,9 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
 .booklet ul { margin: 4px 0 0; padding: 0; list-style: none; }
 .booklet li { font-size: .92rem; line-height: 1.5; margin-top: 4px; }
 .booklet .bterm { font-weight: 600; }
+.booklet p { margin: 4px 0 0; font-size: .92rem; line-height: 1.5; }
+.src .report { color: var(--accent); }
+
+/* שעון סבב */
+.rh-side { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.timer { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; white-space: nowrap; }

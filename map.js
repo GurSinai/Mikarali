@@ -31,7 +31,7 @@ function recordAnswer(p, right) {
   saveStore();
 }
 function recordSession(cat, level, correct, total) {
-  store.sessions.push({ ts: Date.now(), cat, level, correct, total });
+  store.sessions.push({ ts: Date.now(), cat, level, correct, total, dur: stopTimer() });
   saveStore();
 }
 
@@ -74,6 +74,12 @@ function marker(p, cls = '') {
   return `<g class="pm ${p.t} ${cls}" data-id="${p.id}">
     <circle class="hit" cx="${x}" cy="${y}" r="11"/><path class="sym" d="${symPath(p.t, x, y)}"/>
     <text class="lbl" x="${x - 8}" y="${y + 3.5}">${esc(label(p))}</text></g>`;
+}
+// שם של נקודה שמוקמה מוצג ל-10 שניות ואז דוהה, כדי שהמפה לא תתמלא. הקשה על הנקודה מציגה אותו שוב
+function flashLabel(g) {
+  g.classList.add('showlbl');
+  clearTimeout(g._lblTimer);
+  g._lblTimer = setTimeout(() => g.classList.remove('showlbl'), 10000);
 }
 const ringPath = r => 'M' + r.map(([la, lo]) => proj(la, lo).map(v => v.toFixed(1)).join(' ')).join('L') + 'Z';
 function baseMap(inner = '') {
@@ -159,11 +165,12 @@ function bestBadge(cat, level) {
   return `<em class="badge">אחרון ${pct(s[s.length - 1])}% · שיא ${Math.max(...s.map(pct))}% · ${s.length} סבבים</em>`;
 }
 function startRound() {
+  startTimer();
   const { cat, level } = settings, items = pick(cat, settings.size || 999);
   [renderLevel1, renderLevel2, renderLevel3][level - 1](cat, items);
 }
 function roundHeader(cat, level, extra = '') {
-  return `<div class="roundhead"><div><small>${esc(catName(cat))}</small><h2>${LEVELS[level].name}</h2></div>${extra}</div>`;
+  return `<div class="roundhead"><div><small>${esc(catName(cat))}</small><h2>${LEVELS[level].name}</h2></div><div class="rh-side">${timerHtml()}${extra}</div></div>`;
 }
 function finish(root, cat, level, correct, total) {
   recordSession(cat, level, correct, total);
@@ -171,7 +178,7 @@ function finish(root, cat, level, correct, total) {
   el.innerHTML = `
     <div class="score ${pct >= 80 ? 'good' : pct >= 50 ? 'mid' : 'bad'}">
       <div class="big">${pct}%</div>
-      <div>${correct} מתוך ${total} נכונות בניסיון הראשון</div>
+      <div>${correct} מתוך ${total} נכונות בניסיון הראשון · ⏱ ${fmtDur(lastDur)}</div>
       <div class="actions"><button class="primary" id="again">סבב נוסף</button><button id="home">חזרה לבחירה</button></div>
     </div>`;
   el.querySelector('#again').onclick = startRound;
@@ -206,7 +213,8 @@ function renderLevel1(cat, items) {
   };
   const miss = id => { if (!tried.has(id)) { tried.add(id); recordAnswer(byId(id), false); } pool.querySelector(`[data-id="${id}"]`)?.classList.add('miss'); };
   const place = (id, g) => {
-    if (!id || g.classList.contains('done')) return;
+    if (g.classList.contains('done')) return flashLabel(g);
+    if (!id) return;
     if (id !== g.dataset.id) {
       miss(id);
       g.classList.add('no'); setTimeout(() => g.classList.remove('no'), 700);
@@ -215,6 +223,7 @@ function renderLevel1(cat, items) {
     if (!tried.has(id)) { tried.add(id); correct++; recordAnswer(byId(id), true); }
     g.classList.remove('peek');
     g.classList.add('done', tried.has(id) && pool.querySelector(`[data-id="${id}"]`).classList.contains('miss') ? 'late' : 'ok');
+    flashLabel(g);
     pool.querySelector(`[data-id="${id}"]`).remove();
     sel = null; hintbtn.disabled = true;
     left--; count();
@@ -279,6 +288,7 @@ function renderLevel2(cat, items) {
     <div id="result"></div>`;
   wireZoom(root);
   const q = root.querySelector('#q'), marks = root.querySelector('.marks');
+  marks.addEventListener('click', e => { const g = e.target.closest('.pm.done'); if (g) flashLabel(g); });
   const ask = () => {
     const p = items[i];
     root.querySelector('#cnt').textContent = `${i + 1} / ${items.length} · ${correct} נכונות`;
@@ -306,6 +316,7 @@ function renderLevel2(cat, items) {
       if (right) correct++;
       recordAnswer(p, right);
       g.classList.remove('target'); g.classList.add('done', right ? 'ok' : 'late');
+      flashLabel(g);
       q.querySelector('#fb').innerHTML = `
         <div class="feedback ${right ? 'right' : 'wrong'}">
           <b>${right ? 'נכון!' : 'לא נכון'}</b>
@@ -363,7 +374,7 @@ function renderLevel3(cat, items) {
     recordAnswer(p, right);
     const [tx, ty] = proj(p.lat, p.lon);
     marks.innerHTML = `<line class="miss-line" x1="${x}" y1="${y}" x2="${tx}" y2="${ty}"/>
-      <path class="guess" d="M${x - 4} ${y - 4}L${x + 4} ${y + 4}M${x + 4} ${y - 4}L${x - 4} ${y + 4}"/>` + marker(p, `done ${right ? 'ok' : 'late'}`);
+      <path class="guess" d="M${x - 4} ${y - 4}L${x + 4} ${y + 4}M${x + 4} ${y - 4}L${x - 4} ${y + 4}"/>` + marker(p, `done keep ${right ? 'ok' : 'late'}`);
     const d = Math.round(dist);
     q.querySelector('#fb').innerHTML = `
       <div class="feedback ${right ? 'right' : 'wrong'}">
@@ -404,7 +415,7 @@ function renderStats() {
     .join('');
   const recent = store.sessions.slice(-15).reverse().map(x => `
     <li><span>${new Date(x.ts).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-    <span>${esc(catName(x.cat))} · ${LEVELS[x.level].name}</span><b>${x.correct}/${x.total} (${pct(x)}%)</b></li>`).join('');
+    <span>${esc(catName(x.cat))} · ${LEVELS[x.level].name}</span><b>${x.correct}/${x.total} (${pct(x)}%)${durText(x)}</b></li>`).join('');
   app.innerHTML = `
     <section class="panel">
       <h2>הציונים שלך</h2>

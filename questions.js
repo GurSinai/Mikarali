@@ -109,6 +109,7 @@ function startRound() {
 
 function renderRound(qs) {
   setNav('home');
+  startTimer();
   let i = 0;
   const results = [];
   app.innerHTML = '<div class="round"></div>';
@@ -132,7 +133,7 @@ function renderRound(qs) {
     root.innerHTML = `
       <div class="roundhead">
         <div><small>${esc(q.s)}${q.p ? ' · ' + esc(q.p) : ''}</small><h2>שאלה ${i + 1} מתוך ${qs.length}</h2></div>
-        <span class="counter">${correct} נכונות</span>
+        <div class="rh-side">${timerHtml()}<span class="counter">${correct} נכונות</span></div>
       </div>
       <div class="progress"><span style="width:${100 * i / qs.length}%"></span></div>
       <div class="qcard">
@@ -195,7 +196,7 @@ function renderRound(qs) {
     if (i < qs.length) return show();
     document.removeEventListener('keydown', keyHandler);
     const correct = results.filter(r => r.right).length;
-    store.sessions.push({ ts: Date.now(), subject: settings.subject, part: settings.part, mode: settings.mode, correct, total: results.length });
+    store.sessions.push({ ts: Date.now(), subject: settings.subject, part: settings.part, mode: settings.mode, correct, total: results.length, dur: stopTimer() });
     saveStore();
     renderSummary(results);
   };
@@ -207,8 +208,23 @@ function renderRound(qs) {
 
 // הסבר קצר מהחוברת (נבחר אוטומטית מהכרטיסיות שנכתבו מהחוברת)
 function booklet(q) {
-  if (!q.e) return '';
-  return `<div class="booklet"><b>מהחוברת</b><ul>${q.e.map(([t, d]) => `<li><span class="bterm">${esc(t)}</span> – ${esc(d)}</li>`).join('')}</ul></div>`;
+  if (q.e) return `<div class="booklet"><b>מהחוברת</b><ul>${q.e.map(([t, d]) => `<li><span class="bterm">${esc(t)}</span> – ${esc(d)}</li>`).join('')}</ul></div>`;
+  if (q.x) return `<div class="booklet"><b>הסבר${q.xp ? ` · חוברת עמ' ${q.xp}` : ''}</b><p>${esc(q.x)}</p></div>`;
+  return '';
+}
+
+// דיווח על טעות: פותח מייל עם פרטי השאלה
+const REPORT_TO = 'gursin384@gmail.com';
+function reportLink(q, correctText) {
+  const body = `מזהה שאלה: ${q.id}
+נושא: ${q.s}
+שאלה: ${q.q}
+${q.t === 'mc' ? `אפשרויות: ${q.o.join(' | ')}
+` : ''}התשובה המסומנת: ${correctText}
+
+מה לדעתך שגוי (ומקור, אם יש):
+`;
+  return `mailto:${REPORT_TO}?subject=${encodeURIComponent('Mikarali mistake report')}&body=${encodeURIComponent(body)}`;
 }
 
 // הסבר אחרי תשובה: התשובה הנכונה, הסבר מהחוברת, הערות, ומה הוסיף או תיקן Claude
@@ -223,7 +239,7 @@ function explain(q, right) {
     ${q.t === 'mc' ? `<div class="feedback ${right ? 'right' : 'wrong'}"><b>${right ? 'נכון!' : 'לא נכון'}</b>${right ? '' : `<p>התשובה הנכונה: <strong>${esc(correctText)}</strong></p>`}</div>` : ''}
     ${booklet(q)}
     ${tags.length ? `<ul class="meta">${tags.join('')}</ul>` : ''}
-    <p class="src">מקור: ${q.src.map(esc).join(' · ')}</p>`;
+    <p class="src">מקור: ${q.src.map(esc).join(' · ')} · <a class="report" href="${reportLink(q, correctText)}">דווח על טעות</a></p>`;
 }
 
 function renderSummary(results) {
@@ -233,7 +249,7 @@ function renderSummary(results) {
   app.innerHTML = `
     <div class="score ${p >= 80 ? 'good' : p >= 50 ? 'mid' : 'bad'}">
       <div class="big">${p}%</div>
-      <div>${correct} מתוך ${results.length} נכונות</div>
+      <div>${correct} מתוך ${results.length} נכונות · ⏱ ${fmtDur(lastDur)}</div>
       <div class="actions"><button class="primary" id="again">סבב נוסף</button><button id="home">חזרה לבחירה</button></div>
     </div>
     ${wrong.length ? `<section class="panel"><h2>שאלות שטעית בהן</h2><ul class="list review">${wrong.map(({ q }) => `
@@ -261,7 +277,7 @@ function renderStats() {
     .join('');
   const recent = store.sessions.slice(-15).reverse().map(x => `
     <li><span>${new Date(x.ts).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-    <span>${esc(x.subject)}${x.part ? ' · ' + esc(x.part) : ''} · ${MODES[x.mode].name}</span><b>${x.correct}/${x.total} (${pct(x)}%)</b></li>`).join('');
+    <span>${esc(x.subject)}${x.part ? ' · ' + esc(x.part) : ''} · ${MODES[x.mode].name}</span><b>${x.correct}/${x.total} (${pct(x)}%)${durText(x)}</b></li>`).join('');
 
   app.innerHTML = `
     <section class="panel">
