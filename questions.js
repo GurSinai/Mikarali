@@ -181,6 +181,7 @@ function renderRound(qs) {
         after.hidden = false;
         after.innerHTML = `
           <div class="feedback neutral"><b>התשובה:</b><p class="ans">${esc(q.a)}</p></div>
+          ${booklet(q)}
           <p class="hint">צדקת?</p>
           <div class="actions"><button class="primary" id="knew">ידעתי ✓</button><button id="didnt">לא ידעתי ✗</button></div>`;
         after.querySelector('#knew').onclick = () => finish(q, true);
@@ -204,7 +205,13 @@ function renderRound(qs) {
   show();
 }
 
-// הסבר אחרי תשובה: התשובה הנכונה, הערות, ומה הוסיף או תיקן Claude
+// הסבר קצר מהחוברת (נבחר אוטומטית מהכרטיסיות שנכתבו מהחוברת)
+function booklet(q) {
+  if (!q.e) return '';
+  return `<div class="booklet"><b>מהחוברת</b><ul>${q.e.map(([t, d]) => `<li><span class="bterm">${esc(t)}</span> – ${esc(d)}</li>`).join('')}</ul></div>`;
+}
+
+// הסבר אחרי תשובה: התשובה הנכונה, הסבר מהחוברת, הערות, ומה הוסיף או תיקן Claude
 function explain(q, right) {
   const correctText = q.t === 'mc' ? q.c.map(k => q.o[k]).join(' / ') : q.a;
   const tags = [];
@@ -214,6 +221,7 @@ function explain(q, right) {
   if (q.n) tags.push(`<li>${esc(q.n)}</li>`);
   return `
     ${q.t === 'mc' ? `<div class="feedback ${right ? 'right' : 'wrong'}"><b>${right ? 'נכון!' : 'לא נכון'}</b>${right ? '' : `<p>התשובה הנכונה: <strong>${esc(correctText)}</strong></p>`}</div>` : ''}
+    ${booklet(q)}
     ${tags.length ? `<ul class="meta">${tags.join('')}</ul>` : ''}
     <p class="src">מקור: ${q.src.map(esc).join(' · ')}</p>`;
 }

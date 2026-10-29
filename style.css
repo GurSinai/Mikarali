@@ -396,3 +396,10 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
   .mpool .card { flex: none; max-width: 200px; white-space: normal; }
   .maplay:has(.mq) .side { order: -1; position: static; }
 }
+
+/* הסבר מהחוברת אחרי תשובה */
+.booklet { margin-top: 10px; padding: 10px 14px; border-radius: 10px; border-inline-start: 3px solid var(--accent); background: var(--accent-soft); text-align: start; }
+.booklet b { font-size: .82rem; color: var(--accent); }
+.booklet ul { margin: 4px 0 0; padding: 0; list-style: none; }
+.booklet li { font-size: .92rem; line-height: 1.5; margin-top: 4px; }
+.booklet .bterm { font-weight: 600; }
