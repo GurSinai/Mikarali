@@ -220,7 +220,7 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
 /* ───────── דף הבית ───────── */
 .landing { max-width: 820px; padding-top: 40px; }
 .landing h1 { font-size: 2rem; margin: 0 0 4px; }
-.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 20px; }
 .choice {
   display: flex; flex-direction: column; gap: 6px; padding: 24px; min-height: 210px;
   border: 1px solid var(--line); border-radius: 16px; color: var(--ink); text-decoration: none;
@@ -334,3 +334,65 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
 .emblem { width: 34px; height: 32px; object-fit: cover; clip-path: circle(47% at 50% 50%); flex: none; margin-inline-end: 10px; }
 .navbtn { white-space: nowrap; }
 .backlink { display: inline-block; margin-bottom: 10px; color: var(--accent); text-decoration: none; font-weight: 500; }
+
+/* מפה אילמת */
+:root { --land: #fbf8f1; --land-edge: #7b8494; --sea: #cfe0f5; --pal-edge: #9aa3b2; }
+@media (prefers-color-scheme: dark) { :root { --land: #232a36; --land-edge: #8b95a8; --sea: #24406b; --pal-edge: #5d6678; } }
+.mapcats { grid-template-columns: repeat(5, 1fr); }
+.maplay { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.mapcol { position: relative; justify-self: center; max-width: 100%; }
+.mapwrap {
+  --maph: max(460px, calc(100vh - 190px));
+  direction: ltr; overflow: auto; max-height: var(--maph); max-width: calc(100vw - 32px);
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--glass);
+}
+.map { display: block; height: calc(var(--maph) * var(--z, 1) - 2px); width: auto; aspect-ratio: 307.3 / 820; touch-action: manipulation; }
+.map .landedge path { fill: none; stroke: var(--land-edge); stroke-width: 2.4; stroke-linejoin: round; }
+.map .land path { fill: var(--land); stroke: none; }
+.map .pal path { fill: none; stroke: var(--pal-edge); stroke-width: .9; stroke-dasharray: 3 2; }
+.map .water path { fill: var(--sea); stroke: var(--land-edge); stroke-width: .5; }
+.map .cty { fill: var(--muted); font-size: 10px; text-anchor: middle; opacity: .7; }
+.map .seaname { fill: var(--accent); font-size: 12px; font-weight: 700; text-anchor: middle; opacity: .7; }
+.map.pickable { cursor: crosshair; }
+.zoom { position: absolute; z-index: 2; top: 8px; left: 8px; display: flex; flex-direction: column; gap: 4px; }
+.zoom button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-size: 1.2rem; font-weight: 700; line-height: 1; box-shadow: var(--shadow); }
+
+.pm { cursor: pointer; }
+.pm .hit { fill: transparent; }
+.pm .sym { fill: var(--accent); stroke: var(--surface); stroke-width: 1.2; transition: transform .15s; transform-box: fill-box; transform-origin: center; }
+.pm:hover .sym { transform: scale(1.3); }
+.pm .lbl { display: none; font-size: 8.5px; font-weight: 700; fill: var(--ink); direction: rtl; text-anchor: start; paint-order: stroke; stroke: var(--land); stroke-width: 2.5px; stroke-linejoin: round; pointer-events: none; }
+.pm.done { cursor: default; }
+.pm.done .lbl { display: inline; }
+.pm.done.ok .sym { fill: var(--good); }
+.pm.done.late .sym { fill: var(--bad); }
+.pm.no .sym { fill: var(--bad); animation: shake .35s; }
+.pm.hide { display: none; }
+.pm.target .sym, .pm.peek .sym { fill: var(--mid); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.7); } }
+@keyframes shake { 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+.map .guess { stroke: var(--ink); stroke-width: 2; stroke-linecap: round; }
+.map .miss-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 2; }
+
+.side { min-width: 0; position: sticky; top: 70px; display: flex; flex-direction: column; gap: 8px; }
+.mpool { max-height: calc(100vh - 150px); }
+.mpool .card { text-align: start; }
+.card.miss { border-color: var(--bad); }
+.card.miss::after { content: ' ✗'; color: var(--bad); }
+.hintbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 7px 12px; color: var(--muted); }
+.hintbtn:disabled { opacity: .45; cursor: default; }
+.mq { padding: 20px 16px; }
+.nameform { display: flex; gap: 8px; align-items: stretch; }
+.nameform .ac { flex: 1; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); text-align: start; }
+.legend { white-space: nowrap; display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.legend i { font-style: normal; color: var(--accent); margin-inline-start: 6px; }
+
+@media (max-width: 720px) {
+  .mapcats { grid-template-columns: repeat(3, 1fr); }
+  .maplay { grid-template-columns: minmax(0, 1fr); }
+  .mapwrap { --maph: max(420px, calc(100vh - 230px)); width: fit-content; max-width: 100%; margin: 0 auto; }
+  .side { position: sticky; top: auto; bottom: 8px; z-index: 5; }
+  .mpool { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; max-height: none; min-height: 0; box-shadow: 0 6px 20px rgb(0 0 0 / .18); }
+  .mpool .card { flex: none; max-width: 200px; white-space: normal; }
+  .maplay:has(.mq) .side { order: -1; position: static; }
+}

@@ -16,7 +16,7 @@
   </header>
   <main class="landing">
     <h1>מה מתרגלים היום?</h1>
-    <p class="hint">שני מצבי תרגול לפי הסיכום ומאגר השאלות ממבחני מקראות ישראל.</p>
+    <p class="hint">שלושה מצבי תרגול לפי הסיכום, מאגר השאלות ממבחני מקראות ישראל והמפה האילמת.</p>
     <div class="choices">
       <a class="choice" href="timeline.html">
         <span class="choice-icon" aria-hidden="true">
@@ -33,6 +33,14 @@
         <b>תרגול שאלות</b>
         <p>שאלות ממבחנים קודמים: מקראות ישראל, נשק, עזרה ראשונה, קשר, תחקיר ומפה.</p>
         <em class="badge" id="q-summary"></em>
+      </a>
+      <a class="choice" href="map.html">
+        <span class="choice-icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48"><path d="M6 11l11-4 14 4 11-4v30l-11 4-14-4-11 4z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M17 7v30M31 11v30" stroke="currentColor" stroke-width="3"/></svg>
+        </span>
+        <b>מילוי מפה ריקה</b>
+        <p>חבלי ארץ, תופעות טבע, אתרים ויישובים – ממקמים על מפה אילמת.</p>
+        <em class="badge" id="map-summary"></em>
       </a>
     </div>
     <a class="choice learnlink" href="learn.html">
@@ -57,6 +65,7 @@
     };
     document.getElementById('tl-summary').textContent = sum(tl);
     document.getElementById('q-summary').textContent = sum(qs);
+    document.getElementById('map-summary').textContent = sum(read('mikraot-map-v1').sessions || []);
   </script>
 </body>
 </html>
