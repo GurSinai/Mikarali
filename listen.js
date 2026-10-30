@@ -69,7 +69,7 @@ function utter(text) {
 async function say(text) {
   if (!HAS_TTS) return;
   for (const c of chunks(text)) {
-    if (!running) return;
+    if (busy()) return;
     await new Promise(res => {
       const u = utter(c);
       // ביטחון: אם onend לא מגיע (קורה באייפון), ממשיכים אחרי זמן משוער
@@ -286,40 +286,88 @@ function pickQuestions() {
 }
 
 const SAY_Q = settings => settings.listen
-  ? [['🔢', 'אמרו את מספר התשובה או את התשובה עצמה'], ['🤷', '״לא יודע״ – לשמוע את התשובה'], ['⏭', '״דלג״'], ['⟲', '״חזור״'], ['■', '״עצור״']]
-  : [['⏳', 'המכשיר ימתין ויקריא את התשובה'], ['⏭', 'דלג'], ['⟲', 'חזור'], ['■', 'עצור']];
+  ? [['🔢', 'אמרו את מספר התשובה או הקישו עליה'], ['🤷', '״לא יודע״'], ['⏭', '״דלג״'], ['⟲', '״חזור״'], ['■', '״עצור״']]
+  : [['👆', 'הקישו על התשובה'], ['🤷', 'לא יודע – לשמוע את התשובה']];
 const SAY_C = settings => settings.listenC
   ? [['💬', 'אמרו את התשובה'], ['👁', '״הצג תשובה״'], ['⏭', '״דלג״'], ['⟲', '״חזור״'], ['■', '״עצור״']]
-  : [['⏳', 'המכשיר ימתין ויקריא את ההסבר'], ['⏭', 'דלג'], ['⟲', 'חזור'], ['■', 'עצור']];
-function screen(title, body, cards) {
+  : [['⏳', `התשובה תוקרא אחרי ${settings.wait} שניות, או מיד בלחיצה על ״הצג תשובה״`]];
+
+// מסך הסבב: כפתורים גדולים שקל ללחוץ עליהם בלי להסתכל הרבה
+function screen(title, body, kind, q) {
+  const cards = kind === 'cards';
   const cmds = (cards ? SAY_C : SAY_Q)(settings);
+  const answers = !cards && q && q.t === 'mc'
+    ? `<div class="vanswers">${q.o.map((o, k) => `<button class="vansbtn" data-k="${k}"><b>${k + 1}</b><span>${esc(o)}</span></button>`).join('')}</div>` : '';
   app.innerHTML = `
     <section class="voicebox">
       <small class="vcount">${esc(title)}</small>
       <div class="vtext">${body}</div>
       <p class="vstatus" id="status"></p>
     </section>
-    <ul class="vcmds" aria-label="פקודות">${cmds.map(([i, t]) => `<li><span>${i}</span>${esc(t)}</li>`).join('')}</ul>
+    ${answers}
     <div class="vcontrols">
-      ${cards ? '<button id="vshow">👁 הצג תשובה</button>' : '<button id="vshow">🤷 לא יודע</button>'}<button id="vskip">⏭ דלג</button><button id="vrep">⟲ חזור</button><button class="danger" id="vstop">■ עצור</button>
-    </div>`;
+      ${cards ? '<button class="primary vwide" id="vshow">👁 הצג תשובה</button>' : '<button class="vwide" id="vshow">🤷 לא יודע</button>'}
+      <button id="vskip">⏭ דלג</button><button id="vrep">⟲ חזור</button><button class="danger" id="vstop">■ עצור</button>
+    </div>
+    <ul class="vcmds" aria-label="פקודות">${cmds.map(([i, t]) => `<li><span>${i}</span>${esc(t)}</li>`).join('')}</ul>`;
   app.querySelector('#vstop').onclick = () => { pending = 'stop'; stopAll(); };
   app.querySelector('#vskip').onclick = () => { pending = 'skip'; interrupt(); };
   app.querySelector('#vrep').onclick = () => { pending = 'repeat'; interrupt(); };
   app.querySelector('#vshow').onclick = () => { pending = 'show'; interrupt(); };
+  app.querySelectorAll('.vansbtn').forEach(b => b.onclick = () => {
+    if (tapped !== null || b.disabled) return;
+    tapped = +b.dataset.k; b.classList.add('sel'); interrupt();
+  });
 }
-// לחיצה על כפתור בזמן הקראה/הקשבה: עוצרים את מה שקורה, והלולאה בודקת את pending
-let pending = null;
-function interrupt() { if (HAS_TTS) speechSynthesis.cancel(); if (recog) try { recog.abort(); } catch { } }
+// כפתורי "ידעתי / לא ידעתי" לשאלה פתוחה, אחרי שהתשובה הוקראה
+function showKnew() {
+  const html = `<div class="vanswers two"><button class="vansbtn" data-yn="1"><b>✓</b><span>ידעתי</span></button><button class="vansbtn" data-yn="0"><b>✗</b><span>לא ידעתי</span></button></div>`;
+  app.querySelector('.voicebox').insertAdjacentHTML('afterend', html);
+  app.querySelectorAll('[data-yn]').forEach(b => b.onclick = () => { if (tapped === null) { tapped = +b.dataset.yn; b.classList.add('sel'); interrupt(); } });
+}
+// מסמן את התשובות על הכפתורים: הנכונה בירוק, הבחירה השגויה באדום
+function markAnswers(q, chosen) {
+  app.querySelectorAll('.vansbtn[data-k]').forEach(b => {
+    const k = +b.dataset.k;
+    b.disabled = true;
+    if (q.c.includes(k)) b.classList.add('right');
+    else if (k === chosen) b.classList.add('wrong');
+  });
+}
+
+// לחיצה על כפתור בזמן הקראה, הקשבה או המתנה: עוצרים מיד, והלולאה בודקת את pending / tapped
+let pending = null, tapped = null, wake = null;
+function interrupt() {
+  if (HAS_TTS) speechSynthesis.cancel();
+  if (recog) try { recog.abort(); } catch { }
+  if (wake) wake();
+}
 function stopAll() { running = false; interrupt(); }
 const take = () => { const p = pending; pending = null; return p; };
+const busy = () => !running || pending !== null || tapped !== null;
+// המתנה שנקטעת מיד בלחיצה
+function pause(ms) {
+  return new Promise(r => {
+    if (busy()) return r();
+    const t = setTimeout(() => { wake = null; r(); }, ms);
+    wake = () => { clearTimeout(t); wake = null; r(); };
+  });
+}
 
+// סבב חדש תמיד מחליף את הקודם: עוצרים את הקודם ומחכים שיסתיים, כדי שלא ימשיך לכתוב על המסך
+let active = null, runSeq = 0;
 async function start() {
-  running = true; pending = null;
+  const my = ++runSeq;
   unlockSpeech('מתחילים');  // חייב לקרות מיד בלחיצה, לפני כל await
+  if (active) { running = false; interrupt(); await active.catch(() => { }); }
+  if (my !== runSeq) return;
+  running = true; pending = null; tapped = null;
   if (navigator.wakeLock) navigator.wakeLock.request('screen').then(l => { wakeLock = l; }).catch(() => { });
-  const result = settings.mode === 'questions' ? await runQuestions() : await runCards();
-  running = false;
+  const p = settings.mode === 'questions' ? runQuestions() : runCards();
+  active = p;
+  const result = await p;
+  if (my !== runSeq) return;  // סבב חדש כבר התחיל
+  active = null; running = false;
   try { if (wakeLock) await wakeLock.release(); } catch { }
   renderEnd(result);
 }
@@ -330,85 +378,107 @@ async function runQuestions() {
   for (let i = 0; i < qs.length && running; i++) {
     const q = qs[i];
     const mc = q.t === 'mc';
-    screen(`שאלה ${i + 1} מתוך ${qs.length} · ${q.s}`, `<p class="vq">${esc(q.q)}</p>${mc ? `<ol class="vopts">${q.o.map(o => `<li>${esc(o)}</li>`).join('')}</ol>` : ''}`);
+    tapped = null; pending = null;
+    screen(`שאלה ${i + 1} מתוך ${qs.length} · ${q.s}`, `<p class="vq">${esc(q.q)}</p>`, 'questions', q);
     let outcome = null;  // 'right' | 'wrong' | 'skip' | 'reveal' | 'dunno'
-    let openDone = false;  // שאלה פתוחה שכבר הוקראה תשובתה ונרשמה
-    let tries = 0;
+    let chosen = null, openDone = false, tries = 0;
+    const fromTap = () => { chosen = tapped; tapped = null; return q.c.includes(chosen) ? 'right' : 'wrong'; };
     while (running && !outcome) {
       await say(`שאלה ${i + 1}. ${q.q}`);
-      if (mc) for (let k = 0; k < q.o.length && running && !pending; k++) await say(`${k + 1}. ${q.o[k]}`);
+      if (mc) for (let k = 0; k < q.o.length && !busy(); k++) await say(`${k + 1}. ${q.o[k]}`);
+      if (mc && tapped !== null) { outcome = fromTap(); break; }
       let p = take();
       if (p === 'stop' || !running) break;
       if (p === 'repeat') continue;
       if (p === 'skip') { outcome = 'skip'; break; }
       if (p === 'show') { outcome = mc ? 'wrong' : 'dunno'; break; }
       if (!settings.listen) {
-        status(`⏳ ${settings.wait} שניות לחשוב…`);
-        await sleep(settings.wait * 1000);
+        // בלי מיקרופון: שאלה אמריקאית מחכה להקשה על תשובה; שאלה פתוחה – זמן לחשוב ואז התשובה
+        status(mc ? '👆 הקישו על התשובה' : `⏳ ${settings.wait} שניות לחשוב…`);
+        await pause(mc ? (settings.wait + 25) * 1000 : settings.wait * 1000);
+        if (mc && tapped !== null) { outcome = fromTap(); break; }
         p = take();
+        if (p === 'stop' || !running) break;
         if (p === 'repeat') continue;
-        outcome = p === 'skip' ? 'skip' : 'reveal';
+        if (p === 'skip') { outcome = 'skip'; break; }
+        outcome = p === 'show' ? (mc ? 'wrong' : 'dunno') : (mc ? 'reveal' : 'dunno');
         break;
       }
-      // הקשבה לתשובה, עם עוד ניסיון אחד אם לא הובנה
+      // הקשבה לתשובה (אפשר גם להקיש), עם עוד ניסיון אחד אם לא הובנה
       while (running && !outcome) {
         const alts = await listen((settings.wait + 6) * 1000);
+        if (mc && tapped !== null) { outcome = fromTap(); break; }
         p = take();
         if (p === 'stop' || !running) break;
         if (p === 'repeat') break;
         if (p === 'skip') { outcome = 'skip'; break; }
-        if (p === 'show') { outcome = 'wrong'; break; }
+        if (p === 'show') { outcome = mc ? 'wrong' : 'dunno'; break; }
         const cmd = command(alts);
         if (cmd === 'stop') { running = false; break; }
         if (cmd === 'repeat') break;
         if (cmd === 'skip') { outcome = 'skip'; break; }
         if (cmd === 'dunno' || cmd === 'show') { outcome = mc ? 'wrong' : 'dunno'; break; }
         if (!alts) {
-          if (++tries >= 2) { outcome = 'wrong'; break; }
+          if (++tries >= 2) { outcome = mc ? 'wrong' : 'dunno'; break; }
           await say('לא שמעתי. נסה שוב, או אמור לא יודע.');
           continue;
         }
+        status(`שמעתי: ״${alts[0]}״`);
         if (mc) {
           const k = matchOption(alts, q.o);
-          status(`שמעתי: ״${alts[0]}״`);
           if (k < 0) {
             if (++tries >= 2) { outcome = 'wrong'; break; }
             await say('לא הבנתי. אמור את מספר התשובה.');
             continue;
           }
+          chosen = k;
           outcome = q.c.includes(k) ? 'right' : 'wrong';
         } else {
-          status(`שמעתי: ״${alts[0]}״`);
-          await say('התשובה היא: ' + q.a);
-          await say('ידעת? אמור כן או לא.');
-          const yn = await listen(6000);
-          const t = yn ? norm(yn[0]) : '';
-          outcome = /^(כן|נכון|ידעתי|בטח)/.test(t) ? 'right' : 'wrong';
-          answered++; if (outcome === 'right') right++;
-          recordAnswer(q, outcome === 'right');
-          openDone = true;
+          outcome = 'dunno';  // תשובה פתוחה: מקריאים את התשובה ושואלים אם ידעת
         }
       }
-      if (pending === 'repeat' || (!outcome && running)) { take(); continue; }
+      if (!outcome && running) { take(); continue; }
     }
     if (!running) break;
     if (outcome === 'skip') continue;
     const correct = mc ? q.c.map(k => q.o[k]).join(' או ') : q.a;
     const box = app.querySelector('.vtext');
-    if (mc && outcome !== 'reveal') {
-      answered++; if (outcome === 'right') right++;
-      recordAnswer(q, outcome === 'right');
-      box.insertAdjacentHTML('beforeend', `<p class="vres ${outcome}">${outcome === 'right' ? 'נכון!' : 'התשובה: ' + esc(correct)}</p>`);
-      await say(outcome === 'right' ? 'נכון!' : `לא נכון. התשובה הנכונה: ${q.c[0] + 1}. ${correct}`);
-    } else if (!openDone) {
-      if (outcome === 'dunno') { answered++; recordAnswer(q, false); }
+    if (mc) {
+      markAnswers(q, chosen);
+      if (outcome === 'reveal') {
+        box.insertAdjacentHTML('beforeend', `<p class="vres">התשובה: ${esc(correct)}</p>`);
+        await say(`התשובה: ${q.c[0] + 1}. ${correct}`);
+      } else {
+        answered++; if (outcome === 'right') right++;
+        recordAnswer(q, outcome === 'right');
+        box.insertAdjacentHTML('beforeend', `<p class="vres ${outcome}">${outcome === 'right' ? 'נכון!' : 'התשובה: ' + esc(correct)}</p>`);
+        await say(outcome === 'right' ? 'נכון!' : `לא נכון. התשובה הנכונה: ${q.c[0] + 1}. ${correct}`);
+      }
+    } else {
+      // שאלה פתוחה: התשובה, ואז "ידעת?" – בקול או בכפתורים
       box.insertAdjacentHTML('beforeend', `<p class="vres">התשובה: ${esc(correct)}</p>`);
+      take(); tapped = null;
+      showKnew();
       await say('התשובה: ' + correct);
+      if (tapped === null && !pending && running) {
+        await say('ידעת?');
+        if (settings.listen) {
+          const yn = await listen(7000);
+          if (tapped === null && yn) tapped = /^(כן|נכון|ידעתי|בטח)/.test(norm(yn[0])) ? 1 : 0;
+        } else await pause(8000);
+      }
+      if (tapped !== null) {
+        answered++; if (tapped === 1) right++;
+        recordAnswer(q, tapped === 1);
+        openDone = true;
+      }
+      tapped = null;
     }
     const ex = q.x || (q.e && q.e[0] && q.e[0][1]);
-    if (ex && running && !pending) { box.insertAdjacentHTML('beforeend', `<p class="vex">${esc(ex)}</p>`); await say(ex); }
-    take();
-    await sleep(700);
+    if (ex && !busy()) { box.insertAdjacentHTML('beforeend', `<p class="vex">${esc(ex)}</p>`); await say(ex); }
+    if (take() === 'stop') break;
+    await pause(1200);
+    take(); tapped = null;
   }
   return { kind: 'questions', right, answered };
 }
@@ -418,7 +488,8 @@ async function runCards() {
   let done = 0, knew = 0;
   for (let i = 0; i < cards.length && running; i++) {
     const c = cards[i];
-    screen(`כרטיסייה ${i + 1} מתוך ${cards.length} · ${c.s}`, `<p class="vq">${esc(c.t)}</p>`, true);
+    pending = null;
+    screen(`כרטיסייה ${i + 1} מתוך ${cards.length} · ${c.s}`, `<p class="vq">${esc(c.t)}</p>`, 'cards');
     let p;
     while (running) {
       await say(c.t);
@@ -439,20 +510,22 @@ async function runCards() {
         }
       } else {
         status(`⏳ ${settings.wait} שניות לחשוב…`);
-        await sleep(settings.wait * 1000);
+        await pause(settings.wait * 1000);
         p = take();
         if (p === 'repeat') continue;
-        if (p === 'skip') break;
+        if (p === 'skip' || p === 'stop') break;
       }
       break;
     }
     if (!running) break;
     if (p === 'skip') continue;
+    status('');
     app.querySelector('.vtext').insertAdjacentHTML('beforeend', `<p class="vex">${esc(c.d)}</p>`);
     await say(c.d);
     done++;
+    if (take() === 'stop') break;
+    await pause(1200);
     take();
-    await sleep(800);
   }
   return { kind: 'cards', done, knew };
 }
@@ -466,10 +539,10 @@ function renderEnd(r) {
     <section class="voicebox">
       <div class="vtext"><p class="vq">סיימנו</p><p>${line}</p></div>
     </section>
-    <div class="vcontrols"><button class="primary" id="again">▶ עוד סבב</button><button id="home">חזרה לבחירה</button></div>`;
+    <div class="vcontrols two"><button class="primary" id="again">▶ עוד סבב</button><button id="home">חזרה לבחירה</button></div>`;
   app.querySelector('#again').onclick = start;
   app.querySelector('#home').onclick = renderHome;
-  if (r.kind === 'questions' && r.answered) { running = true; say(line).then(() => { running = false; }); }
+  if (r.kind === 'questions' && r.answered && HAS_TTS) speechSynthesis.speak(utter(line));  // בלי לגעת ב-running, כדי שסבב חדש לא ייעצר
 }
 
 renderHome();
