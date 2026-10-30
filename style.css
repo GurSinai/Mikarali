@@ -438,3 +438,7 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
   .vq { font-size: 1.35rem; }
   .vcontrols { grid-template-columns: 1fr 1fr; }
 }
+.voicetest { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.voicetest button { padding: 12px; font-weight: 700; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+.testout { margin: 10px 0 0; font-weight: 500; min-height: 1.4em; }
+.vtap { width: 100%; margin-top: 12px; padding: 20px !important; font-size: 1.35rem; border-radius: 14px; }
