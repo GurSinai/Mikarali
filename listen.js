@@ -22,7 +22,7 @@ function recordAnswer(q, right) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch { }
 }
 
-const settings = { mode: 'questions', qSubject: 'מקראות ישראל', cSubject: C_SUBJECTS[0], size: 20, listen: !!SR, listenC: false, wait: 5, rate: 1, explain: 'wrong' };
+const settings = { mode: 'questions', qSubject: 'מקראות ישראל', cSubject: C_SUBJECTS[0], size: 20, listen: !!SR, listenC: false, wait: 5, rate: 1, explain: 'wrong', srLang: 'he-IL' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('mikraot-voice-settings'))); } catch { }
 if (!SR) settings.listen = settings.listenC = false;
 // מיקרופון בנפרד לשאלות ולכרטיסיות (בכרטיסיות כבוי כברירת מחדל: מקריא, ממתין ומקריא את התשובה)
@@ -98,6 +98,28 @@ const MIC_ERRORS = {
   'language-not-supported': 'זיהוי דיבור בעברית לא נתמך במכשיר הזה.',
   'no-speech': 'לא נשמע דיבור.',
 };
+// באייפון (וחלק ממכשירי אנדרואיד) הזיהוי לא תמיד מסמן תוצאה "סופית" – לכן אוספים גם תוצאות ביניים,
+// ומסיימים אחרי שתיקה קצרה. קוד השפה נבחר בבדיקת המיקרופון (יש מכשירים שמקבלים רק he או iw-IL).
+const SR_LANGS = ['he-IL', 'he', 'iw-IL'];
+function newRecognizer(onText, onFinish) {
+  const r = new SR();
+  r.lang = settings.srLang || 'he-IL';
+  r.interimResults = true; r.continuous = true; r.maxAlternatives = 4;
+  let heard = '', alts = [], silence = null, ended = false;
+  const finish = () => { if (ended) return; ended = true; clearTimeout(silence); try { r.stop(); } catch { } onFinish(heard ? [heard, ...alts.filter(x => x.trim() && x.trim() !== heard)] : null); };
+  r.onresult = e => {
+    let t = '';
+    for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+    heard = t.trim();
+    const last = e.results[e.results.length - 1];
+    if (last.isFinal) alts = [...last].map(x => x.transcript);
+    if (onText) onText(heard);
+    clearTimeout(silence);
+    silence = setTimeout(finish, last.isFinal ? 600 : 1500);
+  };
+  r.finish = finish;
+  return r;
+}
 function listen(ms) {
   return new Promise(res => {
     if (!mic() || !running) return res(null);
@@ -105,20 +127,17 @@ function listen(ms) {
     const fin = v => { if (done) return; done = true; clearTimeout(timer); recog = null; status(''); hideTap(); res(v); };
     const begin = () => {
       tapping = false;
-      const r = new SR();
-      r.lang = 'he-IL'; r.interimResults = false; r.maxAlternatives = 4; r.continuous = false;
-      let got = false;
-      r.onresult = e => { got = true; try { r.abort(); } catch { } fin([...e.results[0]].map(a => a.transcript)); };
+      const r = newRecognizer(t => status('🎤 ' + t), v => { try { r.abort(); } catch { } fin(v); });
       r.onerror = e => {
         if (['not-allowed', 'service-not-allowed'].includes(e.error) && !micBlocked && running) {
           micBlocked = true; tapping = true; clearTimeout(timer); recog = null; showTap(begin);
           return;
         }
         if (e.error !== 'no-speech' && e.error !== 'aborted') status('⚠ ' + (MIC_ERRORS[e.error] || e.error));
-        fin(null);
+        r.finish();
       };
-      r.onend = () => { if (!got && !tapping) fin(null); };
-      timer = setTimeout(() => { try { r.abort(); } catch { } fin(null); }, ms);
+      r.onend = () => { if (!tapping) r.finish(); };
+      timer = setTimeout(() => r.finish(), ms);
       recog = r;
       status('🎤 מקשיב…');
       try { r.start(); } catch { fin(null); }
@@ -265,15 +284,32 @@ function testSpeech() {
   setTimeout(() => { if (!started) testOut('✗ לא התחילה הקראה. בדקו שהטלפון לא במצב שקט (מתג הצד באייפון) ושהעוצמה פתוחה. ' + he); }, 3000);
 }
 function testMic() {
-  const r = new SR();
-  r.lang = 'he-IL'; r.interimResults = false; r.maxAlternatives = 1;
-  let got = false;
-  r.onstart = () => testOut('🎤 דברו עכשיו… (למשל "אחת")');
-  r.onresult = e => { got = true; testOut('✓ המיקרופון עובד. שמעתי: "' + e.results[0][0].transcript + '"'); };
-  r.onerror = e => { got = true; testOut('✗ ' + (MIC_ERRORS[e.error] || 'שגיאה: ' + e.error)); };
-  r.onend = () => { if (!got) testOut('✗ לא נקלט דיבור. נסו שוב ודברו מיד אחרי ההודעה.'); };
+  const lang = settings.srLang || 'he-IL';
+  const seen = [];
+  let text = '', errored = '', tail = ' · 🎤 דברו עכשיו (למשל "אחת")';
+  const show = (extra = tail) => testOut(`שפה: ${lang} · אירועים: ${seen.join(', ') || '—'}${text ? ` · שמעתי: "${text}"` : ''}${extra}`);
+  const r = newRecognizer(t => { text = t; show(); }, v => {
+    if (v) {
+      settings.srLang = lang; persist();
+      tail = ' · ✓ המיקרופון עובד'; show();
+    } else {
+      const next = SR_LANGS[(SR_LANGS.indexOf(lang) + 1) % SR_LANGS.length];
+      settings.srLang = next; persist();
+      const why = errored ? ' · ' + (MIC_ERRORS[errored] || errored)
+        : seen.includes('דיבור') || seen.includes('קול') ? ` · ✗ נשמע קול אבל לא התקבל טקסט. עברתי לקוד שפה ${next} – לחצו שוב על הבדיקה`
+        : ' · ✗ לא נקלט קול בכלל – בדקו שהמיקרופון לא בשימוש באפליקציה אחרת';
+      tail = why; show();
+    }
+  });
+  const ev = (name, label) => r.addEventListener(name, () => { if (!seen.includes(label)) seen.push(label); show(); });
+  ev('start', 'התחיל'); ev('audiostart', 'מיקרופון'); ev('soundstart', 'קול'); ev('speechstart', 'דיבור'); ev('speechend', 'סוף דיבור'); ev('end', 'סיום');
+  r.addEventListener('end', () => r.finish());
+  r.onerror = e => { errored = e.error; if (e.error !== 'aborted') { seen.push('שגיאה: ' + e.error); show(); } };
+  setTimeout(() => r.finish(), 9000);
+  show();
   try { r.start(); } catch (err) { testOut('✗ ' + err.message); }
 }
+
 
 // שאלות שמתאימות להקראה: תשובה אחת נכונה, בלי אפשרויות שמפנות זו לזו
 const usable = q => q.t === 'open' || (q.c.length === 1 && !q.o.some(o => /[אבגד]'\s*(ו|\+)|תשובות|התשובות נכונות/.test(o)));
