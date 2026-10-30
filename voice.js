@@ -1,12 +1,15 @@
 'use strict';
-// למידה בקול: המכשיר מקריא שאלות או כרטיסיות (Text-to-Speech), ואפשר לענות בקול (Speech-to-Text).
+// תרגול בקול: המכשיר מקריא שאלות או כרטיסיות (Text-to-Speech), ואפשר לענות בקול (Speech-to-Text).
 // נועד ללמידה בלי ידיים – בנהיגה, בבישול וכו'. עובד עם מנועי הדיבור של הדפדפן, בלי שרת.
+// נפתח מתוך דף השאלות או דף הכרטיסיות: Voice.open('questions' | 'cards', { back, subject }).
+// הכל עטוף בפונקציה כדי שהשמות כאן (settings, renderHome...) לא יתנגשו עם הדף המארח.
+(function () {
 
-const QUESTIONS = window.QUESTIONS, CARDS = window.CARDS;
+const QUESTIONS = window.QUESTIONS || [], CARDS = window.CARDS || [];
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const HAS_TTS = 'speechSynthesis' in window;
 const Q_SUBJECTS = ['מקראות ישראל', 'התקווה וההמנון', 'מפה', 'נשק', 'עזרה ראשונה', 'קשר', 'תחקיר', 'פיקוד ותורת הלחימה', 'הכל'];
-const C_SUBJECTS = [...window.CARD_SUBJECTS, 'הכל'];
+const C_SUBJECTS = [...(window.CARD_SUBJECTS || []), 'הכל'];
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -265,18 +268,12 @@ function renderHome() {
   const cur = isQ ? settings.qSubject : settings.cSubject;
   const count = s => isQ ? QUESTIONS.filter(q => (s === 'הכל' || q.s === s) && usable(q)).length : CARDS.filter(c => s === 'הכל' || c.s === s).length;
   app.innerHTML = `
+    ${onBack ? '<button class="backlink vback" id="vback">→ חזרה לתרגול הרגיל</button>' : ''}
     <section class="landing voicehead">
-      <h1>למידה בקול</h1>
+      <h1>${isQ ? 'תרגול שאלות בקול' : 'תרגול כרטיסיות בקול'}</h1>
       <p class="hint">המכשיר מקריא, ואת/ה עונה בקול – בלי ידיים ובלי להסתכל על המסך. אחרי לחיצה על ״התחל״ הכל קורה לבד.</p>
       ${!HAS_TTS ? '<p class="warn">הדפדפן הזה לא תומך בהקראה. נסו ב-Chrome או ב-Safari.</p>' : ''}
       ${!SR ? '<p class="warn">הדפדפן הזה לא תומך בזיהוי דיבור, אז אפשר רק להקשיב: המכשיר יקריא, ימתין, ויקריא את התשובה. (זיהוי דיבור עובד ב-Chrome ובאייפון ב-Safari)</p>' : ''}
-    </section>
-    <section class="panel">
-      <h2>מה לומדים?</h2>
-      <div class="levels voicemodes">
-        <button class="level ${isQ ? 'on' : ''}" data-mode="questions"><b>שאלות</b><p>מקריא שאלה ואפשרויות, ואת/ה עונה במספר או בתשובה עצמה. נשמר בהתקדמות של תרגול השאלות.</p></button>
-        <button class="level ${!isQ ? 'on' : ''}" data-mode="cards"><b>כרטיסיות</b><p>מקריא מושג, מחכה לתשובה שלך, ואז מקריא את ההסבר מהחוברת.</p></button>
-      </div>
     </section>
     <section class="panel">
       <h2>נושא</h2>
@@ -302,7 +299,8 @@ function renderHome() {
       <div class="voicetest"><button id="ttest">🔊 בדיקת הקראה</button><button id="mtest" ${SR ? '' : 'disabled'}>🎤 בדיקת מיקרופון</button></div>
       <p class="testout" id="testout">${SR ? '' : 'הדפדפן הזה לא תומך בזיהוי דיבור.'}</p>
     </section>`;
-  app.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { settings.mode = b.dataset.mode; persist(); renderHome(); });
+  const back = app.querySelector('#vback');
+  if (back) back.onclick = () => { stopAll(); onBack(); };
   app.querySelectorAll('[data-subj]').forEach(b => b.onclick = () => { settings[isQ ? 'qSubject' : 'cSubject'] = b.dataset.subj; persist(); renderHome(); });
   app.querySelector('#size').onchange = e => { settings.size = +e.target.value; persist(); };
   app.querySelector('#rate').onchange = e => { settings.rate = +e.target.value; persist(); };
@@ -636,4 +634,19 @@ function renderEnd(r) {
   if (r.kind === 'questions' && r.answered && HAS_TTS) speechSynthesis.speak(utter(line));  // בלי לגעת ב-running, כדי שסבב חדש לא ייעצר
 }
 
-renderHome();
+let onBack = null;
+window.Voice = {
+  // פותח את מסך התרגול בקול בתוך #app של הדף
+  open(mode, opts = {}) {
+    settings.mode = mode;
+    onBack = opts.back || null;
+    if (opts.subject && mode === 'questions' && Q_SUBJECTS.includes(opts.subject)) settings.qSubject = opts.subject;
+    if (opts.subject && mode === 'cards' && C_SUBJECTS.includes(opts.subject)) settings.cSubject = opts.subject;
+    persist();
+    renderHome();
+    window.scrollTo(0, 0);
+  },
+  stop() { stopAll(); document.body.classList.remove('vrunning'); },
+};
+
+})();

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261030k">
+  <link rel="stylesheet" href="style.css?v=20261031a">
 </head>
 <body>
   <div class="flagbg" aria-hidden="true"><svg class="flag-star" viewBox="74 40 72 80"><g fill="none" stroke-width="5.5"><path d="M110 47 L138.6 96.5 L81.4 96.5 Z"/><path d="M110 113 L81.4 63.5 L138.6 63.5 Z"/></g></svg></div>
@@ -16,7 +16,7 @@
   </header>
   <main class="landing">
     <h1>מה מתרגלים היום?</h1>
-    <p class="hint">שלושה מצבי תרגול לפי הסיכום, מאגר השאלות ממבחני מקראות ישראל והמפה האילמת.</p>
+    <p class="hint">תרגול לפי הסיכום, מאגר השאלות ממבחני מקראות ישראל, הכרטיסיות והמפה האילמת. בשאלות ובכרטיסיות אפשר לתרגל גם בקול.</p>
     <div class="choices">
       <a class="choice" href="timeline.html">
         <span class="choice-icon" aria-hidden="true">
@@ -42,11 +42,19 @@
         <p>חבלי ארץ, תופעות טבע, אתרים ויישובים – ממקמים על מפה אילמת.</p>
         <em class="badge" id="map-summary"></em>
       </a>
+      <a class="choice" href="cards.html">
+        <span class="choice-icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48"><rect x="6" y="12" width="28" height="22" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><path d="M14 8h24a4 4 0 0 1 4 4v18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+        </span>
+        <b>תרגול כרטיסיות</b>
+        <p>כל העובדות מהסיכום ככרטיסיות לפי נושא – מושג, תשובה, ידעתי או לא. אפשר גם בקול.</p>
+        <em class="badge" id="c-summary"></em>
+      </a>
     </div>
     <a class="choice learnlink" href="learn.html">
       <div>
-        <b>מעבר ללמידה</b>
-        <p>כרטיסיות ב-Quizlet ועץ המשפחה – אבות, מלכים, חשמונאים ומשפחות בעת החדשה.</p>
+        <b>חומרים נוספים</b>
+        <p>הכרטיסיות ב-Quizlet ועץ המשפחה – אבות, מלכים, חשמונאים ומשפחות בעת החדשה.</p>
       </div>
       <span class="choice-icon" aria-hidden="true">
         <svg viewBox="0 0 48 48"><path d="M8 12c6-2 11-2 16 2 5-4 10-4 16-2v24c-6-2-11-2-16 2-5-4-10-4-16-2z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M24 14v24" stroke="currentColor" stroke-width="3"/></svg>
@@ -65,6 +73,8 @@
     };
     document.getElementById('tl-summary').textContent = sum(tl);
     document.getElementById('q-summary').textContent = sum(qs);
+    const cs = read('mikraot-cards-v1').sessions || [];
+    document.getElementById('c-summary').textContent = cs.length ? `${cs.length} סבבים · אחרון ${Math.round(100 * cs[cs.length - 1].knew / cs[cs.length - 1].total)}%` : 'עוד לא תרגלת';
     document.getElementById('map-summary').textContent = sum(read('mikraot-map-v1').sessions || []);
   </script>
 </body>
