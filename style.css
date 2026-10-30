@@ -462,3 +462,33 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
 .testout { margin: 10px 0 0; font-weight: 500; min-height: 1.4em; }
 .vtap { width: 100%; margin-top: 12px; padding: 20px !important; font-size: 1.35rem; border-radius: 14px; }
 .vcontrols.two { grid-template-columns: 1fr 1fr; }
+
+/* למידה בקול – מסך מלא בזמן סבב: כפתורים ענקיים */
+body.vrunning { overflow: hidden; }
+body.vrunning .topbar, body.vrunning .flagbg { display: none; }
+.vrun {
+  position: fixed; inset: 0; z-index: 50; background: var(--bg);
+  display: flex; flex-direction: column; gap: 8px;
+  padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+}
+.vtop { flex: 0 1 auto; max-height: 36vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px; }
+.vtop .vq { font-size: 1.2rem; margin: 2px 0 4px; }
+.vtop .vres { font-size: 1.15rem; margin: 6px 0 2px; }
+.vtop .vex { font-size: .98rem; padding: 8px 10px; margin: 6px 0 0; }
+.vtop .vstatus { margin: 4px 0 0; min-height: 1.2em; }
+.vhint { margin: 2px 0 0; color: var(--muted); font-size: .8rem; }
+.vslot { flex: 1 1 auto; min-height: 0; display: grid; gap: 8px; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; }
+.vslot.n1 { grid-template-columns: 1fr; }
+.vslot.n2 { grid-template-columns: 1fr 1fr; }
+.vslot.n3 > :last-child, .vslot.n5 > :last-child { grid-column: 1 / -1; }
+.vslot .vansbtn { min-height: 0; height: 100%; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 8px; padding: 8px; font-size: 1.1rem; font-weight: 600; border-width: 3px; border-radius: 18px; overflow: hidden; }
+.vslot .vansbtn b { width: 64px; height: 64px; font-size: 2.3rem; }
+.vslot .vansbtn span { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.vbig { height: 100%; width: 100%; font-size: 2.2rem; font-weight: 800; border-radius: 20px; border: 3px solid var(--line); background: var(--surface); touch-action: manipulation; }
+.vbar { flex: 0 0 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; height: 16vh; min-height: 72px; max-height: 130px; }
+.vbar button { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 1.7rem; font-weight: 800; border-radius: 16px; border: 2px solid var(--line); background: var(--surface); touch-action: manipulation; }
+.vbar button span { font-size: 1rem; }
+.vbar .danger { border-color: var(--bad); }
+.vrun .vtap { flex: 0 0 auto; margin: 0; }
+.vbig:active, .vbar button:active { transform: scale(.97); }
+@media (min-width: 900px) { .vrun { padding-inline: calc((100vw - 860px) / 2); } }
