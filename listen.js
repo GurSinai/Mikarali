@@ -22,9 +22,11 @@ function recordAnswer(q, right) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch { }
 }
 
-const settings = { mode: 'questions', qSubject: 'מקראות ישראל', cSubject: C_SUBJECTS[0], size: 20, listen: !!SR, wait: 5, rate: 1 };
+const settings = { mode: 'questions', qSubject: 'מקראות ישראל', cSubject: C_SUBJECTS[0], size: 20, listen: !!SR, listenC: false, wait: 5, rate: 1 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('mikraot-voice-settings'))); } catch { }
-if (!SR) settings.listen = false;
+if (!SR) settings.listen = settings.listenC = false;
+// מיקרופון בנפרד לשאלות ולכרטיסיות (בכרטיסיות כבוי כברירת מחדל: מקריא, ממתין ומקריא את התשובה)
+const mic = () => !!SR && (settings.mode === 'cards' ? settings.listenC : settings.listen);
 const persist = () => { try { localStorage.setItem('mikraot-voice-settings', JSON.stringify(settings)); } catch { } };
 
 // ───────── דיבור ─────────
@@ -98,7 +100,7 @@ const MIC_ERRORS = {
 };
 function listen(ms) {
   return new Promise(res => {
-    if (!SR || !settings.listen || !running) return res(null);
+    if (!mic() || !running) return res(null);
     let done = false, timer = null, tapping = false;
     const fin = v => { if (done) return; done = true; clearTimeout(timer); recog = null; status(''); hideTap(); res(v); };
     const begin = () => {
@@ -219,13 +221,14 @@ function renderHome() {
     <section class="panel voiceopts">
       <label>כמה בסבב <select id="size">${[10, 20, 50, 0].map(n => `<option value="${n}" ${settings.size === n ? 'selected' : ''}>${n || 'הכל'}</option>`).join('')}</select></label>
       <label>מהירות הקראה <select id="rate">${[[0.8, 'איטי'], [1, 'רגיל'], [1.2, 'מהיר']].map(([v, n]) => `<option value="${v}" ${settings.rate === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-      <label class="chk"><input type="checkbox" id="lis" ${settings.listen ? 'checked' : ''} ${SR ? '' : 'disabled'}> לענות בקול (מיקרופון)</label>
+      <label class="chk"><input type="checkbox" id="lis" ${mic() ? 'checked' : ''} ${SR ? '' : 'disabled'}> לענות בקול (מיקרופון)</label>
       <label>זמן לחשוב <select id="wait">${[3, 5, 8, 12].map(n => `<option value="${n}" ${settings.wait === n ? 'selected' : ''}>${n} שניות</option>`).join('')}</select></label>
     </section>
     <section class="panel">
       <p class="hint">${isQ
         ? 'פקודות קוליות: לענות במספר התשובה או בתשובה עצמה, <b>״לא יודע״</b> – לשמוע את התשובה, <b>״דלג״</b>, <b>״חזור״</b>, <b>״עצור״</b>.'
-        : 'פקודות קוליות: לומר את התשובה, או <b>״הצג תשובה״</b> – לשמוע אותה, או <b>״דלג״</b>. וגם <b>״חזור״</b> ו<b>״עצור״</b>.'} הפקודות מופיעות גם על המסך בזמן הלמידה.</p>
+        : mic() ? 'פקודות קוליות: לומר את התשובה, או <b>״הצג תשובה״</b> – לשמוע אותה, או <b>״דלג״</b>. וגם <b>״חזור״</b> ו<b>״עצור״</b>.'
+          : `המכשיר מקריא מושג, ממתין ${settings.wait} שניות ומקריא את התשובה. אפשר לדלג, לחזור או לעצור בכפתורים. (רוצים לענות בקול? סמנו ״לענות בקול״)`} הפקודות מופיעות גם על המסך בזמן הלמידה.</p>
       <button class="primary bigstart" id="start" ${HAS_TTS ? '' : 'disabled'}>▶ התחל</button>
     </section>
     <section class="panel">
@@ -239,7 +242,7 @@ function renderHome() {
   app.querySelector('#size').onchange = e => { settings.size = +e.target.value; persist(); };
   app.querySelector('#rate').onchange = e => { settings.rate = +e.target.value; persist(); };
   app.querySelector('#wait').onchange = e => { settings.wait = +e.target.value; persist(); };
-  app.querySelector('#lis').onchange = e => { settings.listen = e.target.checked; persist(); };
+  app.querySelector('#lis').onchange = e => { settings[isQ ? 'listen' : 'listenC'] = e.target.checked; persist(); renderHome(); };
   app.querySelector('#start').onclick = start;
   app.querySelector('#ttest').onclick = testSpeech;
   if (SR) app.querySelector('#mtest').onclick = testMic;
@@ -285,7 +288,7 @@ function pickQuestions() {
 const SAY_Q = settings => settings.listen
   ? [['🔢', 'אמרו את מספר התשובה או את התשובה עצמה'], ['🤷', '״לא יודע״ – לשמוע את התשובה'], ['⏭', '״דלג״'], ['⟲', '״חזור״'], ['■', '״עצור״']]
   : [['⏳', 'המכשיר ימתין ויקריא את התשובה'], ['⏭', 'דלג'], ['⟲', 'חזור'], ['■', 'עצור']];
-const SAY_C = settings => settings.listen
+const SAY_C = settings => settings.listenC
   ? [['💬', 'אמרו את התשובה'], ['👁', '״הצג תשובה״'], ['⏭', '״דלג״'], ['⟲', '״חזור״'], ['■', '״עצור״']]
   : [['⏳', 'המכשיר ימתין ויקריא את ההסבר'], ['⏭', 'דלג'], ['⟲', 'חזור'], ['■', 'עצור']];
 function screen(title, body, cards) {
@@ -422,7 +425,7 @@ async function runCards() {
       p = take();
       if (p === 'repeat') continue;
       if (p === 'skip' || p === 'stop' || p === 'show') break;
-      if (settings.listen) {
+      if (mic()) {
         const alts = await listen((settings.wait + 6) * 1000);
         p = take();
         const cmd = command(alts);
