@@ -43,49 +43,98 @@ function spoken(t) {
     .replace(/מ\.ק|מ"ק|מ״ק/g, 'מכשיר קשר').replace(/(\d)\s*[-–]\s*(\d)/g, '$1 עד $2')
     .replace(/\s\/\s/g, ' או ').replace(/[–—]/g, ', ').replace(/[*_|]/g, ' ').replace(/\n+/g, '. ');
 }
-// מנועי דיבור נקטעים בטקסטים ארוכים – מחלקים לקטעים קצרים
+// מנועי דיבור נקטעים בטקסטים ארוכים – מחלקים לקטעים קצרים (בלי lookbehind, שלא נתמך ב-Safari ישן)
 function chunks(t) {
-  const parts = spoken(t).split(/(?<=[.!?:;,])\s+/);
+  const parts = spoken(t).match(/[^.!?:;,]+[.!?:;,]*/g) || [];
   const out = [];
-  for (const p of parts) {
+  for (const raw of parts) {
+    const p = raw.trim();
+    if (!p) continue;
     if (out.length && (out[out.length - 1] + ' ' + p).length < 180) out[out.length - 1] += ' ' + p;
     else out.push(p);
   }
-  return out.filter(x => x.trim());
+  return out;
+}
+const keep = [];  // באייפון מבע שנאסף ע"י ה-GC לא מסיים – שומרים הפניה
+function utter(text) {
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'he-IL';
+  if (voice) u.voice = voice;
+  u.rate = settings.rate;
+  keep.push(u); if (keep.length > 20) keep.shift();
+  return u;
 }
 async function say(text) {
   if (!HAS_TTS) return;
   for (const c of chunks(text)) {
     if (!running) return;
     await new Promise(res => {
-      const u = new SpeechSynthesisUtterance(c);
-      u.lang = 'he-IL';
-      if (voice) u.voice = voice;
-      u.rate = settings.rate;
-      u.onend = u.onerror = res;
+      const u = utter(c);
+      // ביטחון: אם onend לא מגיע (קורה באייפון), ממשיכים אחרי זמן משוער
+      const t = setTimeout(res, 2500 + c.length * 110 / settings.rate);
+      u.onend = u.onerror = () => { clearTimeout(t); res(); };
+      try { speechSynthesis.resume(); } catch { }
       speechSynthesis.speak(u);
     });
   }
 }
+// באייפון מותר להתחיל לדבר רק מתוך לחיצה – אומרים משהו מיד בלחיצה על "התחל"
+function unlockSpeech(text) {
+  if (!HAS_TTS) return;
+  try { speechSynthesis.cancel(); speechSynthesis.resume(); } catch { }
+  speechSynthesis.speak(utter(text));
+}
 
 // ───────── הקשבה ─────────
-let recog = null;
+// אם הטלפון חוסם הקשבה שלא התחילה בלחיצה, מציגים כפתור גדול "הקש כדי לענות"
+let recog = null, micBlocked = false;
+const MIC_ERRORS = {
+  'not-allowed': 'המיקרופון חסום לאתר. אשרו גישה למיקרופון בהגדרות הדפדפן.',
+  'service-not-allowed': 'זיהוי הדיבור כבוי. באייפון: הגדרות › כללי › מקלדת › "הפעל הכתבה".',
+  'audio-capture': 'אין גישה למיקרופון.',
+  'network': 'זיהוי הדיבור צריך חיבור לאינטרנט.',
+  'language-not-supported': 'זיהוי דיבור בעברית לא נתמך במכשיר הזה.',
+  'no-speech': 'לא נשמע דיבור.',
+};
 function listen(ms) {
   return new Promise(res => {
     if (!SR || !settings.listen || !running) return res(null);
-    const r = new SR();
-    r.lang = 'he-IL'; r.interimResults = false; r.maxAlternatives = 4; r.continuous = false;
-    let done = false;
-    const fin = v => { if (done) return; done = true; clearTimeout(timer); recog = null; status(''); try { r.abort(); } catch { } res(v); };
-    r.onresult = e => fin([...e.results[0]].map(a => a.transcript));
-    r.onerror = () => fin(null);
-    r.onend = () => fin(null);
-    const timer = setTimeout(() => fin(null), ms);
-    recog = r;
-    status('🎤 מקשיב…');
-    try { r.start(); } catch { fin(null); }
+    let done = false, timer = null, tapping = false;
+    const fin = v => { if (done) return; done = true; clearTimeout(timer); recog = null; status(''); hideTap(); res(v); };
+    const begin = () => {
+      tapping = false;
+      const r = new SR();
+      r.lang = 'he-IL'; r.interimResults = false; r.maxAlternatives = 4; r.continuous = false;
+      let got = false;
+      r.onresult = e => { got = true; try { r.abort(); } catch { } fin([...e.results[0]].map(a => a.transcript)); };
+      r.onerror = e => {
+        if (['not-allowed', 'service-not-allowed'].includes(e.error) && !micBlocked && running) {
+          micBlocked = true; tapping = true; clearTimeout(timer); recog = null; showTap(begin);
+          return;
+        }
+        if (e.error !== 'no-speech' && e.error !== 'aborted') status('⚠ ' + (MIC_ERRORS[e.error] || e.error));
+        fin(null);
+      };
+      r.onend = () => { if (!got && !tapping) fin(null); };
+      timer = setTimeout(() => { try { r.abort(); } catch { } fin(null); }, ms);
+      recog = r;
+      status('🎤 מקשיב…');
+      try { r.start(); } catch { fin(null); }
+    };
+    if (micBlocked) { tapping = true; showTap(begin); } else begin();
   });
 }
+function showTap(begin) {
+  status('🎤 הטלפון דורש לחיצה כדי להקשיב');
+  if (document.querySelector('.vtap')) return;
+  const b = document.createElement('button');
+  b.className = 'primary vtap';
+  b.textContent = '🎤 הקש כדי לענות';
+  b.onclick = () => { b.remove(); begin(); };
+  const c = document.querySelector('.vcontrols');
+  if (c) c.before(b);
+}
+function hideTap() { const b = document.querySelector('.vtap'); if (b) b.remove(); }
 
 const norm = s => String(s).replace(/[֑-ׇ]/g, '').replace(/["'״׳.,?!:;()\-–]/g, ' ').replace(/\s+/g, ' ').trim();
 const words = s => norm(s).split(' ').filter(w => w.length > 1).map(w => w.length > 3 && 'והבלמשכ'.includes(w[0]) ? w.slice(1) : w);
@@ -178,6 +227,12 @@ function renderHome() {
         ? 'פקודות קוליות: לענות במספר התשובה או בתשובה עצמה, <b>״לא יודע״</b> – לשמוע את התשובה, <b>״דלג״</b>, <b>״חזור״</b>, <b>״עצור״</b>.'
         : 'פקודות קוליות: לומר את התשובה, או <b>״הצג תשובה״</b> – לשמוע אותה, או <b>״דלג״</b>. וגם <b>״חזור״</b> ו<b>״עצור״</b>.'} הפקודות מופיעות גם על המסך בזמן הלמידה.</p>
       <button class="primary bigstart" id="start" ${HAS_TTS ? '' : 'disabled'}>▶ התחל</button>
+    </section>
+    <section class="panel">
+      <h2>בדיקה</h2>
+      <p class="hint">לא עובד? בדקו כאן מה עובד במכשיר. באייפון זיהוי דיבור עובד רק ב-Safari (לא ב-Chrome).</p>
+      <div class="voicetest"><button id="ttest">🔊 בדיקת הקראה</button><button id="mtest" ${SR ? '' : 'disabled'}>🎤 בדיקת מיקרופון</button></div>
+      <p class="testout" id="testout">${SR ? '' : 'הדפדפן הזה לא תומך בזיהוי דיבור.'}</p>
     </section>`;
   app.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { settings.mode = b.dataset.mode; persist(); renderHome(); });
   app.querySelectorAll('[data-subj]').forEach(b => b.onclick = () => { settings[isQ ? 'qSubject' : 'cSubject'] = b.dataset.subj; persist(); renderHome(); });
@@ -186,6 +241,32 @@ function renderHome() {
   app.querySelector('#wait').onchange = e => { settings.wait = +e.target.value; persist(); };
   app.querySelector('#lis').onchange = e => { settings.listen = e.target.checked; persist(); };
   app.querySelector('#start').onclick = start;
+  app.querySelector('#ttest').onclick = testSpeech;
+  if (SR) app.querySelector('#mtest').onclick = testMic;
+}
+function testOut(t) { document.getElementById('testout').textContent = t; }
+function testSpeech() {
+  if (!HAS_TTS) return testOut('הדפדפן לא תומך בהקראה.');
+  pickVoice();
+  const he = voice ? `קול בעברית: ${voice.name}` : 'לא נמצא קול עברי במכשיר – אפשר להוריד אחד בהגדרות › נגישות › תוכן מוקרא › קולות.';
+  const u = utter('שלום, זו בדיקת הקראה בעברית');
+  let started = false;
+  u.onstart = () => { started = true; testOut('🔊 מקריא… ' + he); };
+  u.onend = () => testOut('✓ ההקראה עובדת. ' + he);
+  u.onerror = e => testOut('✗ שגיאה בהקראה: ' + (e.error || '') + '. ' + he);
+  try { speechSynthesis.cancel(); speechSynthesis.resume(); } catch { }
+  speechSynthesis.speak(u);
+  setTimeout(() => { if (!started) testOut('✗ לא התחילה הקראה. בדקו שהטלפון לא במצב שקט (מתג הצד באייפון) ושהעוצמה פתוחה. ' + he); }, 3000);
+}
+function testMic() {
+  const r = new SR();
+  r.lang = 'he-IL'; r.interimResults = false; r.maxAlternatives = 1;
+  let got = false;
+  r.onstart = () => testOut('🎤 דברו עכשיו… (למשל "אחת")');
+  r.onresult = e => { got = true; testOut('✓ המיקרופון עובד. שמעתי: "' + e.results[0][0].transcript + '"'); };
+  r.onerror = e => { got = true; testOut('✗ ' + (MIC_ERRORS[e.error] || 'שגיאה: ' + e.error)); };
+  r.onend = () => { if (!got) testOut('✗ לא נקלט דיבור. נסו שוב ודברו מיד אחרי ההודעה.'); };
+  try { r.start(); } catch (err) { testOut('✗ ' + err.message); }
 }
 
 // שאלות שמתאימות להקראה: תשובה אחת נכונה, בלי אפשרויות שמפנות זו לזו
@@ -232,10 +313,11 @@ const take = () => { const p = pending; pending = null; return p; };
 
 async function start() {
   running = true; pending = null;
-  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { }
+  unlockSpeech('מתחילים');  // חייב לקרות מיד בלחיצה, לפני כל await
+  if (navigator.wakeLock) navigator.wakeLock.request('screen').then(l => { wakeLock = l; }).catch(() => { });
   const result = settings.mode === 'questions' ? await runQuestions() : await runCards();
   running = false;
-  try { await wakeLock?.release(); } catch { }
+  try { if (wakeLock) await wakeLock.release(); } catch { }
   renderEnd(result);
 }
 
