@@ -22,7 +22,7 @@ function recordAnswer(q, right) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch { }
 }
 
-const settings = { mode: 'questions', qSubject: 'מקראות ישראל', cSubject: C_SUBJECTS[0], size: 20, listen: !!SR, listenC: false, wait: 5, rate: 1 };
+const settings = { mode: 'questions', qSubject: 'מקראות ישראל', cSubject: C_SUBJECTS[0], size: 20, listen: !!SR, listenC: false, wait: 5, rate: 1, explain: 'wrong' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('mikraot-voice-settings'))); } catch { }
 if (!SR) settings.listen = settings.listenC = false;
 // מיקרופון בנפרד לשאלות ולכרטיסיות (בכרטיסיות כבוי כברירת מחדל: מקריא, ממתין ומקריא את התשובה)
@@ -133,7 +133,7 @@ function showTap(begin) {
   b.className = 'primary vtap';
   b.textContent = '🎤 הקש כדי לענות';
   b.onclick = () => { b.remove(); begin(); };
-  const c = document.querySelector('.vcontrols');
+  const c = document.querySelector('.vbar') || document.querySelector('.vcontrols');
   if (c) c.before(b);
 }
 function hideTap() { const b = document.querySelector('.vtap'); if (b) b.remove(); }
@@ -196,6 +196,7 @@ function status(t) { const el = document.getElementById('status'); if (el) el.te
 
 function renderHome() {
   running = false;
+  document.body.classList.remove('vrunning');
   const isQ = settings.mode === 'questions';
   const subj = isQ ? Q_SUBJECTS : C_SUBJECTS;
   const cur = isQ ? settings.qSubject : settings.cSubject;
@@ -222,6 +223,7 @@ function renderHome() {
       <label>כמה בסבב <select id="size">${[10, 20, 50, 0].map(n => `<option value="${n}" ${settings.size === n ? 'selected' : ''}>${n || 'הכל'}</option>`).join('')}</select></label>
       <label>מהירות הקראה <select id="rate">${[[0.8, 'איטי'], [1, 'רגיל'], [1.2, 'מהיר']].map(([v, n]) => `<option value="${v}" ${settings.rate === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       <label class="chk"><input type="checkbox" id="lis" ${mic() ? 'checked' : ''} ${SR ? '' : 'disabled'}> לענות בקול (מיקרופון)</label>
+      ${isQ ? `<label>הסבר אחרי שאלה <select id="explain">${[['always', 'תמיד'], ['wrong', 'רק כשטעיתי'], ['never', 'בלי']].map(([v, n]) => `<option value="${v}" ${settings.explain === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>` : ''}
       <label>זמן לחשוב <select id="wait">${[3, 5, 8, 12].map(n => `<option value="${n}" ${settings.wait === n ? 'selected' : ''}>${n} שניות</option>`).join('')}</select></label>
     </section>
     <section class="panel">
@@ -242,6 +244,7 @@ function renderHome() {
   app.querySelector('#size').onchange = e => { settings.size = +e.target.value; persist(); };
   app.querySelector('#rate').onchange = e => { settings.rate = +e.target.value; persist(); };
   app.querySelector('#wait').onchange = e => { settings.wait = +e.target.value; persist(); };
+  if (isQ) app.querySelector('#explain').onchange = e => { settings.explain = e.target.value; persist(); };
   app.querySelector('#lis').onchange = e => { settings[isQ ? 'listen' : 'listenC'] = e.target.checked; persist(); renderHome(); };
   app.querySelector('#start').onclick = start;
   app.querySelector('#ttest').onclick = testSpeech;
@@ -285,45 +288,48 @@ function pickQuestions() {
   }).sort((a, b) => b.k - a.k).slice(0, settings.size || 1e9).map(x => x.q);
 }
 
-const SAY_Q = settings => settings.listen
-  ? [['🔢', 'אמרו את מספר התשובה או הקישו עליה'], ['🤷', '״לא יודע״'], ['⏭', '״דלג״'], ['⟲', '״חזור״'], ['■', '״עצור״']]
-  : [['👆', 'הקישו על התשובה'], ['🤷', 'לא יודע – לשמוע את התשובה']];
-const SAY_C = settings => settings.listenC
-  ? [['💬', 'אמרו את התשובה'], ['👁', '״הצג תשובה״'], ['⏭', '״דלג״'], ['⟲', '״חזור״'], ['■', '״עצור״']]
-  : [['⏳', `התשובה תוקרא אחרי ${settings.wait} שניות, או מיד בלחיצה על ״הצג תשובה״`]];
+const HINT_Q = () => settings.listen ? 'אמרו מספר או הקישו · ״לא יודע״ · ״דלג״ · ״חזור״ · ״עצור״' : 'הקישו על התשובה';
+const HINT_C = () => settings.listenC ? 'אמרו את התשובה · ״הצג תשובה״ · ״דלג״ · ״חזור״ · ״עצור״' : `התשובה תוקרא אחרי ${settings.wait} שניות`;
 
-// מסך הסבב: כפתורים גדולים שקל ללחוץ עליהם בלי להסתכל הרבה
+// מסך הסבב: על כל המסך. למעלה השאלה, באמצע כפתורי תשובה ענקיים, למטה פס פקודות
 function screen(title, body, kind, q) {
   const cards = kind === 'cards';
-  const cmds = (cards ? SAY_C : SAY_Q)(settings);
-  const answers = !cards && q && q.t === 'mc'
-    ? `<div class="vanswers">${q.o.map((o, k) => `<button class="vansbtn" data-k="${k}"><b>${k + 1}</b><span>${esc(o)}</span></button>`).join('')}</div>` : '';
+  const slot = cards
+    ? '<button class="vbig primary" id="vshow2">👁 הצג תשובה</button>'
+    : q && q.t === 'mc'
+      ? q.o.map((o, k) => `<button class="vansbtn" data-k="${k}"><b>${k + 1}</b><span>${esc(o)}</span></button>`).join('')
+      : '<button class="vbig" id="vshow2">👁 הצג תשובה</button>';
+  const n = !cards && q && q.t === 'mc' ? q.o.length : 1;
+  document.body.classList.add('vrunning');
   app.innerHTML = `
-    <section class="voicebox">
-      <small class="vcount">${esc(title)}</small>
-      <div class="vtext">${body}</div>
-      <p class="vstatus" id="status"></p>
-    </section>
-    ${answers}
-    <div class="vcontrols">
-      ${cards ? '<button class="primary vwide" id="vshow">👁 הצג תשובה</button>' : '<button class="vwide" id="vshow">🤷 לא יודע</button>'}
-      <button id="vskip">⏭ דלג</button><button id="vrep">⟲ חזור</button><button class="danger" id="vstop">■ עצור</button>
-    </div>
-    <ul class="vcmds" aria-label="פקודות">${cmds.map(([i, t]) => `<li><span>${i}</span>${esc(t)}</li>`).join('')}</ul>`;
+    <div class="vrun">
+      <div class="vtop">
+        <small class="vcount">${esc(title)}</small>
+        <div class="vtext">${body}</div>
+        <p class="vstatus" id="status"></p>
+        <p class="vhint">${esc(cards ? HINT_C() : HINT_Q())}</p>
+      </div>
+      <div class="vslot n${n}">${slot}</div>
+      <div class="vbar">
+        ${cards ? '' : '<button id="vshow">🤷<span>לא יודע</span></button>'}
+        <button id="vskip">⏭<span>דלג</span></button><button id="vrep">⟲<span>חזור</span></button><button class="danger" id="vstop">■<span>עצור</span></button>
+      </div>
+    </div>`;
   app.querySelector('#vstop').onclick = () => { pending = 'stop'; stopAll(); };
   app.querySelector('#vskip').onclick = () => { pending = 'skip'; interrupt(); };
   app.querySelector('#vrep').onclick = () => { pending = 'repeat'; interrupt(); };
-  app.querySelector('#vshow').onclick = () => { pending = 'show'; interrupt(); };
+  app.querySelectorAll('#vshow, #vshow2').forEach(b => b.onclick = () => { pending = 'show'; interrupt(); });
   app.querySelectorAll('.vansbtn').forEach(b => b.onclick = () => {
     if (tapped !== null || b.disabled) return;
     tapped = +b.dataset.k; b.classList.add('sel'); interrupt();
   });
 }
-// כפתורי "ידעתי / לא ידעתי" לשאלה פתוחה, אחרי שהתשובה הוקראה
+// כפתורי "ידעתי / לא ידעתי" לשאלה פתוחה – ממלאים את אזור הכפתורים
 function showKnew() {
-  const html = `<div class="vanswers two"><button class="vansbtn" data-yn="1"><b>✓</b><span>ידעתי</span></button><button class="vansbtn" data-yn="0"><b>✗</b><span>לא ידעתי</span></button></div>`;
-  app.querySelector('.voicebox').insertAdjacentHTML('afterend', html);
-  app.querySelectorAll('[data-yn]').forEach(b => b.onclick = () => { if (tapped === null) { tapped = +b.dataset.yn; b.classList.add('sel'); interrupt(); } });
+  const slot = app.querySelector('.vslot');
+  slot.className = 'vslot n2';
+  slot.innerHTML = '<button class="vansbtn" data-yn="1"><b>✓</b><span>ידעתי</span></button><button class="vansbtn" data-yn="0"><b>✗</b><span>לא ידעתי</span></button>';
+  slot.querySelectorAll('[data-yn]').forEach(b => b.onclick = () => { if (tapped === null) { tapped = +b.dataset.yn; b.classList.add('sel'); interrupt(); } });
 }
 // מסמן את התשובות על הכפתורים: הנכונה בירוק, הבחירה השגויה באדום
 function markAnswers(q, chosen) {
@@ -381,7 +387,7 @@ async function runQuestions() {
     tapped = null; pending = null;
     screen(`שאלה ${i + 1} מתוך ${qs.length} · ${q.s}`, `<p class="vq">${esc(q.q)}</p>`, 'questions', q);
     let outcome = null;  // 'right' | 'wrong' | 'skip' | 'reveal' | 'dunno'
-    let chosen = null, openDone = false, tries = 0;
+    let chosen = null, openDone = false, tries = 0, lastKnew = null;
     const fromTap = () => { chosen = tapped; tapped = null; return q.c.includes(chosen) ? 'right' : 'wrong'; };
     while (running && !outcome) {
       await say(`שאלה ${i + 1}. ${q.q}`);
@@ -467,6 +473,7 @@ async function runQuestions() {
           if (tapped === null && yn) tapped = /^(כן|נכון|ידעתי|בטח)/.test(norm(yn[0])) ? 1 : 0;
         } else await pause(8000);
       }
+      lastKnew = tapped;
       if (tapped !== null) {
         answered++; if (tapped === 1) right++;
         recordAnswer(q, tapped === 1);
@@ -475,7 +482,9 @@ async function runQuestions() {
       tapped = null;
     }
     const ex = q.x || (q.e && q.e[0] && q.e[0][1]);
-    if (ex && !busy()) { box.insertAdjacentHTML('beforeend', `<p class="vex">${esc(ex)}</p>`); await say(ex); }
+    const wasRight = mc ? outcome === 'right' : lastKnew === 1;
+    const wantEx = settings.explain === 'always' || (settings.explain === 'wrong' && !wasRight);
+    if (ex && wantEx && !busy()) { box.insertAdjacentHTML('beforeend', `<p class="vex">${esc(ex)}</p>`); await say(ex); }
     if (take() === 'stop') break;
     await pause(1200);
     take(); tapped = null;
@@ -532,6 +541,7 @@ async function runCards() {
 
 function renderEnd(r) {
   if (HAS_TTS) speechSynthesis.cancel();
+  document.body.classList.remove('vrunning');
   const line = r.kind === 'questions'
     ? (r.answered ? `ענית נכון על ${r.right} מתוך ${r.answered} שאלות` : 'לא נענו שאלות')
     : `עברת על ${r.done} כרטיסיות${r.knew ? ` · ${r.knew} מהן ענית נכון בקול` : ''}`;
