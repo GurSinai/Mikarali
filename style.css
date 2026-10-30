@@ -409,3 +409,32 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
 /* שעון סבב */
 .rh-side { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .timer { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; white-space: nowrap; }
+
+/* למידה בקול */
+.voicehead { padding-bottom: 0; }
+.warn { color: var(--mid); background: var(--mid-soft); padding: 8px 12px; border-radius: 10px; font-size: .9rem; }
+.voicemodes { grid-template-columns: 1fr 1fr; }
+.voiceopts { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; }
+.voiceopts select { margin-inline-start: 6px; }
+.chk { display: flex; align-items: center; gap: 6px; }
+.bigstart { width: 100%; font-size: 1.3rem; padding: 16px !important; }
+.voicebox { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 20px; min-height: 40vh; box-shadow: var(--shadow); }
+.vcount { color: var(--muted); }
+.vq { font-size: 1.6rem; font-weight: 700; line-height: 1.35; margin: 10px 0 14px; }
+.vopts { font-size: 1.2rem; line-height: 1.5; margin: 0; padding-inline-start: 1.6em; }
+.vopts li { margin: 4px 0; }
+.vres { font-size: 1.3rem; font-weight: 700; margin: 14px 0 4px; }
+.vres.right { color: var(--good); }
+.vres.wrong { color: var(--bad); }
+.vex { color: var(--ink); background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; font-size: 1.05rem; line-height: 1.5; }
+.vstatus { color: var(--accent); font-weight: 600; min-height: 1.4em; margin: 12px 0 0; }
+.vcmds { list-style: none; margin: 12px 0 0; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 6px 16px; background: var(--glass); border: 1px dashed var(--line); border-radius: 10px; font-size: .95rem; }
+.vcmds li { display: flex; gap: 6px; align-items: center; }
+.vcontrols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.vcontrols:has(> :nth-child(2):last-child) { grid-template-columns: 1fr 1fr; }
+.vcontrols button { padding: 14px 6px; font-size: 1.05rem; font-weight: 700; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+@media (max-width: 720px) {
+  .voicemodes { grid-template-columns: 1fr; }
+  .vq { font-size: 1.35rem; }
+  .vcontrols { grid-template-columns: 1fr 1fr; }
+}
