@@ -492,3 +492,20 @@ body.vrunning .topbar, body.vrunning .flagbg { display: none; }
 .vrun .vtap { flex: 0 0 auto; margin: 0; }
 .vbig:active, .vbar button:active { transform: scale(.97); }
 @media (min-width: 900px) { .vrun { padding-inline: calc((100vw - 860px) / 2); } }
+
+/* למידה בקול – טקסט גדול ככל האפשר בתוך הכפתורים ובשאלה */
+.vtop { max-height: 42vh; }
+.vtop .vq { font-size: clamp(1.4rem, 6.4vw, 2.4rem); line-height: 1.25; }
+.vtop .vres { font-size: clamp(1.3rem, 5.6vw, 2rem); }
+.vtop .vex { font-size: clamp(1.05rem, 4.4vw, 1.5rem); }
+.vslot .vansbtn { font-size: clamp(1.25rem, 5.8vw, 2.2rem); font-weight: 700; line-height: 1.2; gap: 6px; }
+.vslot .vansbtn b { width: clamp(52px, 15vw, 84px); height: clamp(52px, 15vw, 84px); font-size: clamp(2rem, 9vw, 3rem); }
+.vslot .vansbtn span { -webkit-line-clamp: 5; }
+.vslot.n2 .vansbtn { font-size: clamp(1.6rem, 8vw, 2.8rem); }
+.vbig { font-size: clamp(2.4rem, 11vw, 4rem); }
+.vbar button { font-size: clamp(1.8rem, 8vw, 2.4rem); }
+.vbar button span { font-size: clamp(1.05rem, 4.6vw, 1.4rem); font-weight: 800; }
+.vslot .vansbtn { font-size: clamp(1.4rem, 7vw, 2.6rem); }
+/* תשובות ארוכות: גופן קצת קטן יותר כדי שייכנסו */
+.vslot .vansbtn.long { font-size: clamp(1rem, 4.4vw, 1.7rem); }
+.vslot .vansbtn.long span { -webkit-line-clamp: 7; }
