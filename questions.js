@@ -51,7 +51,7 @@ function pick(qs, mode, n) {
 
 // ───────── ניווט ─────────
 const app = document.getElementById('app');
-document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => b.dataset.nav === 'stats' ? renderStats() : renderHome()));
+document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => { if (window.Voice) window.Voice.stop(); b.dataset.nav === 'stats' ? renderStats() : renderHome(); }));
 function setNav(which) {
   document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('active', b.dataset.nav === which));
   window.scrollTo(0, 0);
@@ -92,6 +92,10 @@ function renderHome() {
       </label>
       <span class="hint">${avail ? `${avail} שאלות זמינות` : 'אין שאלות שמתאימות לבחירה'}</span>
       <button class="primary" id="start" ${avail ? '' : 'disabled'}>התחל ▸</button>
+    </section>
+    <section class="panel voicepromo">
+      <div><h2>🔊 תרגול בקול</h2><p class="hint">המכשיר מקריא את השאלות, ואפשר לענות בקול או בכפתורים ענקיים – לנהיגה, בישול או ריצה.</p></div>
+      <button class="primary" id="voice">🔊 תרגול בקול</button>
     </section>`;
   app.querySelectorAll('[data-subject]').forEach(b => b.onclick = () => { settings.subject = b.dataset.subject; settings.part = ''; persistSettings(); renderHome(); });
   app.querySelectorAll('[data-part]').forEach(b => b.onclick = () => { settings.part = b.dataset.part; persistSettings(); renderHome(); });
@@ -99,6 +103,7 @@ function renderHome() {
   app.querySelector('#open').onchange = e => { settings.open = e.target.checked; persistSettings(); renderHome(); };
   app.querySelector('#size').onchange = e => { settings.size = +e.target.value; persistSettings(); };
   app.querySelector('#start').onclick = startRound;
+  app.querySelector('#voice').onclick = () => { setNav('home'); window.Voice.open('questions', { back: renderHome, subject: settings.subject }); };
 }
 
 // ───────── סבב שאלות ─────────
