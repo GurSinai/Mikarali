@@ -108,9 +108,15 @@ function newRecognizer(onText, onFinish) {
   let heard = '', alts = [], silence = null, ended = false;
   const finish = () => { if (ended) return; ended = true; clearTimeout(silence); try { r.stop(); } catch { } onFinish(heard ? [heard, ...alts.filter(x => x.trim() && x.trim() !== heard)] : null); };
   r.onresult = e => {
-    let t = '';
-    for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
-    heard = t.trim();
+    const segs = [];
+    for (let i = 0; i < e.results.length; i++) {
+      const t = String(e.results[i][0].transcript || '').trim();
+      if (!t) continue;
+      const prev = segs[segs.length - 1];
+      if (prev && t.startsWith(prev)) segs[segs.length - 1] = t;
+      else if (!prev || !prev.startsWith(t)) segs.push(t);
+    }
+    heard = segs.join(' ');
     const last = e.results[e.results.length - 1];
     if (last.isFinal) alts = [...last].map(x => x.transcript);
     if (onText) onText(heard);
@@ -157,14 +163,19 @@ function showTap(begin) {
 }
 function hideTap() { const b = document.querySelector('.vtap'); if (b) b.remove(); }
 
-const norm = s => String(s).replace(/[֑-ׇ]/g, '').replace(/["'״׳.,?!:;()\-–]/g, ' ').replace(/\s+/g, ' ').trim();
+// נרמול הטקסט שמגיע מזיהוי הדיבור: ניקוד, סימני כיווניות נסתרים (נפוצים בטלפונים), פיסוק ורווחים
+const norm = s => String(s).normalize('NFC')
+  .replace(/[֑-ׇ]/g, '')
+  .replace(/[​-‏‪-‮⁦-⁩﻿ ]/g, ' ')
+  .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+  .replace(/\s+/g, ' ').trim().toLowerCase();
 const words = s => norm(s).split(' ').filter(w => w.length > 1).map(w => w.length > 3 && 'והבלמשכ'.includes(w[0]) ? w.slice(1) : w);
 const COMMANDS = {
   stop: ['עצור', 'סטופ', 'תפסיק', 'הפסק'],
   repeat: ['חזור', 'שוב', 'עוד פעם', 'תחזור'],
   skip: ['דלג', 'הבא', 'תדלג'],
   dunno: ['לא יודע', 'לא יודעת', 'אין לי מושג', 'תגיד'],
-  show: ['הצג תשובה', 'הראה תשובה', 'תראה תשובה', 'מה התשובה', 'הצג', 'תשובה'],
+  show: ['הצג תשובה', 'הראה תשובה', 'תראה תשובה', 'מה התשובה', 'הצג'],
 };
 function command(alts) {
   if (!alts) return null;
@@ -173,22 +184,48 @@ function command(alts) {
   for (const [k, ws] of Object.entries(COMMANDS)) if (ws.some(w => t === w || t.startsWith(w + ' ') || t.endsWith(' ' + w))) return k;
   return null;
 }
-const NUMS = [['1', 'אחת', 'אחד', 'ראשונה', 'ראשון', 'א'], ['2', 'שתיים', 'שתים', 'שניים', 'שנים', 'שנייה', 'שני', 'ב'],
-  ['3', 'שלוש', 'שלושה', 'שלישית', 'שלישי', 'ג'], ['4', 'ארבע', 'ארבעה', 'רביעית', 'רביעי', 'ד'], ['5', 'חמש', 'חמישה', 'חמישית', 'ה']];
-// מזהה איזו אפשרות נאמרה: קודם התאמה לטקסט של האפשרות, ואחר כך מספר האפשרות
+// מספרי תשובה כפי שהם עלולים להגיע מזיהוי הדיבור: ספרה, מילה (זכר/נקבה), סודר, שם אות, ואנגלית
+const NUM_WORDS = [
+  ['1', 'אחת', 'אחד', 'ראשונה', 'ראשון', 'א', 'אלף', 'one'],
+  ['2', 'שתיים', 'שתים', 'שניים', 'שנים', 'שנייה', 'שניה', 'שני', 'ב', 'בית', 'two'],
+  ['3', 'שלוש', 'שלושה', 'שלש', 'שלשה', 'שלישית', 'שלישי', 'ג', 'גימל', 'three'],
+  ['4', 'ארבע', 'ארבעה', 'רביעית', 'רביעי', 'ד', 'דלת', 'four'],
+  ['5', 'חמש', 'חמישה', 'חמישית', 'חמישי', 'ה', 'five'],
+];
+const PREFIXES = 'והבלמשכ';
+// מחזיר את מספר האפשרות (0..4) שנאמר, או -1. עובד גם עם מילים חוזרות ("אחד אחד"), מילות מילוי
+// ("תשובה מספר אחת"), תחיליות ("באחת", "האחת") וספרות צמודות ("1." / "תשובה1")
+function spokenNumber(text) {
+  const found = new Set();
+  for (const w of norm(text).split(' ')) {
+    if (!w) continue;
+    const cands = [w];
+    if (w.length > 2 && PREFIXES.includes(w[0])) cands.push(w.slice(1));
+    if (w.length > 3 && PREFIXES.includes(w[0]) && PREFIXES.includes(w[1])) cands.push(w.slice(2));
+    let k = -1;
+    for (const c of cands) {
+      // אות בודדת (א/ב/ג/ד) נחשבת רק כשנאמרה לבד, לא כשנשארה אחרי הסרת תחילית
+      if (c.length === 1 && c !== w) continue;
+      k = NUM_WORDS.findIndex(ns => ns.includes(c));
+      if (k >= 0) break;
+    }
+    if (k < 0) { const d = w.match(/^\D*([1-5])\D*$/); if (d) k = +d[1] - 1; }
+    if (k >= 0) found.add(k);
+  }
+  return found.size === 1 ? [...found][0] : -1;
+}
+// מזהה איזו אפשרות נאמרה: התאמה לטקסט של האפשרות, מספר האפשרות, או רוב המילים של האפשרות
 function matchOption(alts, opts) {
+  if (!alts) return -1;
+  const no = opts.map(o => norm(o));
   for (const a of alts) {
     const t = norm(a);
-    const k = opts.findIndex(o => norm(o) === t || (/^\d+$/.test(norm(o)) && t.split(' ').includes(norm(o))));
+    const k = no.findIndex(o => o === t || (/^\d+$/.test(o) && t.split(' ').includes(o)));
     if (k >= 0) return k;
   }
-  const numeric = opts.every(o => /^\d+$/.test(norm(o)));
-  if (!numeric) for (const a of alts) {
-    const ws = norm(a).split(' ').filter(w => !['אפשרות', 'תשובה', 'מספר'].includes(w));
-    if (ws.length <= 2) {
-      const k = NUMS.findIndex((ns, i) => i < opts.length && ws.some(w => ns.includes(w)));
-      if (k >= 0) return k;
-    }
+  for (const a of alts) {
+    const k = spokenNumber(a);
+    if (k >= 0 && k < opts.length) return k;
   }
   let best = -1, bestScore = 0;
   for (const a of alts) {
@@ -291,7 +328,8 @@ function testMic() {
   const r = newRecognizer(t => { text = t; show(); }, v => {
     if (v) {
       settings.srLang = lang; persist();
-      tail = ' · ✓ המיקרופון עובד'; show();
+      const k = spokenNumber(v[0]);
+      tail = ' · ✓ המיקרופון עובד' + (k >= 0 ? ` · זוהה כתשובה ${k + 1}` : ' · (לא זוהה מספר תשובה)'); show();
     } else {
       const next = SR_LANGS[(SR_LANGS.indexOf(lang) + 1) % SR_LANGS.length];
       settings.srLang = next; persist();
@@ -333,7 +371,7 @@ function screen(title, body, kind, q) {
   const slot = cards
     ? '<button class="vbig primary" id="vshow2">👁 הצג תשובה</button>'
     : q && q.t === 'mc'
-      ? q.o.map((o, k) => `<button class="vansbtn" data-k="${k}"><b>${k + 1}</b><span>${esc(o)}</span></button>`).join('')
+      ? q.o.map((o, k) => `<button class="vansbtn${o.length > 40 ? ' long' : ''}" data-k="${k}"><b>${k + 1}</b><span>${esc(o)}</span></button>`).join('')
       : '<button class="vbig" id="vshow2">👁 הצג תשובה</button>';
   const n = !cards && q && q.t === 'mc' ? q.o.length : 1;
   document.body.classList.add('vrunning');
@@ -455,7 +493,7 @@ async function runQuestions() {
         if (p === 'repeat') break;
         if (p === 'skip') { outcome = 'skip'; break; }
         if (p === 'show') { outcome = mc ? 'wrong' : 'dunno'; break; }
-        const cmd = command(alts);
+        const cmd = mc && matchOption(alts, q.o) >= 0 ? null : command(alts);
         if (cmd === 'stop') { running = false; break; }
         if (cmd === 'repeat') break;
         if (cmd === 'skip') { outcome = 'skip'; break; }
