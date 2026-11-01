@@ -57,20 +57,14 @@ function recordSession(gate, level, correct, total) {
 }
 
 // בחירת אירועים לסבב: אירועים שטעית בהם (או שלא ראית) מופיעים יותר.
-function pickEvents(gate, n, distinctYears) {
+// כמה אירועים באותה שנה – השנה מופיעה על הציר כמספר האירועים.
+function pickEvents(gate, n) {
   const keyed = eventsOf(gate).map(ev => {
     const s = store.ev[ev.title] || { r: 0, w: 0 };
     const w = (s.w * 2 + 1) / (s.r + 1) + 0.3;
     return { ev, k: Math.pow(Math.random(), 1 / w) };
   }).sort((a, b) => b.k - a.k);
-  const used = new Set(), out = [];
-  for (const { ev } of keyed) {
-    if (out.length >= n) break;
-    if (distinctYears && used.has(ev.y)) continue;
-    used.add(ev.y);
-    out.push(ev);
-  }
-  return out;
+  return keyed.slice(0, n).map(x => x.ev);
 }
 
 // ───────── ניווט ─────────
@@ -134,8 +128,8 @@ function startRound() {
   startTimer();
   const { gate, level } = settings;
   const size = settings.size || 9999;
-  if (level === 3) return renderLevel3(gate, pickEvents(gate, size, false));
-  const evs = pickEvents(gate, size, true).sort((a, b) => a.y - b.y);
+  if (level === 3) return renderLevel3(gate, pickEvents(gate, size));
+  const evs = pickEvents(gate, size).sort((a, b) => a.y - b.y || a.id - b.id);
   if (evs.length < 2) { alert('אין מספיק אירועים בשער הזה'); return; }
   level === 1 ? renderLevel1(gate, evs) : renderLevel2(gate, evs);
 }
@@ -154,7 +148,7 @@ function renderLevel1(gate, evs) {
   app.innerHTML = '<div class="round"></div>';
   const root = app.firstElementChild;  // מאזינים על אלמנט חדש בכל סבב, כדי שלא יצטברו
   root.innerHTML = roundHeader(gate, 1, `<button class="primary" id="check" disabled>בדוק</button>`) + `
-    <p class="hint">גרור אירוע לשנה המתאימה, או הקש על אירוע ואז על השנה.</p>
+    <p class="hint">גרור אירוע לשנה המתאימה, או הקש על אירוע ואז על השנה. שנה שקרו בה כמה אירועים מופיעה כמה פעמים – הסדר ביניהם לא משנה. אפשר לבדוק גם לפני שמילאת הכל.</p>
     <div class="l1">
       <div class="pool" id="pool"></div>
       <ol class="timeline" id="tl"></ol>
@@ -162,6 +156,7 @@ function renderLevel1(gate, evs) {
     <div id="result"></div>`;
   const poolEl = root.querySelector('#pool'), tl = root.querySelector('#tl'), checkBtn = root.querySelector('#check');
   const byId = id => EVENTS[id];
+  let fixes = [];  // slot -> שם האירוע הנכון (אחרי בדיקה)
 
   function draw() {
     const inPool = pool.filter(id => !placed.includes(id));
@@ -172,16 +167,15 @@ function renderLevel1(gate, evs) {
       const id = placed[i];
       let cls = '', fix = '';
       if (checked) {
-        const right = id !== null && byId(id).y === slot.y;
-        cls = right ? 'right' : 'wrong';
-        if (!right) fix = `<div class="fix">✓ ${esc(slot.title)}</div>`;
+        cls = fixes[i] ? 'wrong' : 'right';
+        if (fixes[i]) fix = `<div class="fix">✓ ${esc(fixes[i])}</div>`;
       }
       return `<li class="slot ${cls}" data-slot="${i}">
         <span class="year">${esc(slotLabel(slot))}</span>
         <div class="drop">${id !== null ? `<div class="card placed" draggable="${!checked}" data-id="${id}">${esc(byId(id).title)}</div>` : '<span class="ph">—</span>'}${fix}</div>
       </li>`;
     }).join('');
-    checkBtn.disabled = checked || placed.includes(null);
+    checkBtn.disabled = checked || placed.every(id => id === null);
   }
 
   function place(id, slot) {
@@ -212,13 +206,23 @@ function renderLevel1(gate, evs) {
   });
 
   checkBtn.onclick = () => {
+    const empty = placed.filter(id => id === null).length;
+    if (empty && !confirm(`נשארו ${empty} שנים ריקות. לבדוק בכל זאת? (שנים ריקות ייספרו כטעות)`)) return;
     checked = true;
     let correct = 0;
+    const isRight = i => placed[i] !== null && byId(placed[i]).y === evs[i].y;
+    // אירועים שלא מוקמו נכון – מוצגים כתיקון במשבצות השגויות של אותה שנה
+    const missing = evs.filter(ev => !evs.some((slot, i) => placed[i] === ev.id && isRight(i)));
+    fixes = evs.map((slot, i) => {
+      if (isRight(i)) return null;
+      const k = missing.findIndex(ev => ev.y === slot.y);
+      return k >= 0 ? missing.splice(k, 1)[0].title : slot.title;
+    });
     evs.forEach((slot, i) => {
-      const ev = byId(placed[i]);
-      const right = ev.y === slot.y;
+      const right = isRight(i);
       if (right) correct++;
-      recordAnswer(ev, right);
+      if (placed[i] !== null) recordAnswer(byId(placed[i]), right);
+      else recordAnswer(slot, false);
     });
     recordSession(gate, 1, correct, evs.length);
     draw();
@@ -232,7 +236,7 @@ function renderLevel2(gate, evs) {
   setNav('home');
   const pool = eventsOf(gate);
   app.innerHTML = roundHeader(gate, 2, `<button class="primary" id="check">בדוק</button>`) + `
-    <p class="hint">כתוב מה קרה בכל שנה ובחר מהרשימה. אם כמה אירועים בשער קרו באותה שנה, כל אחד מהם נחשב נכון.</p>
+    <p class="hint">כתוב מה קרה בכל שנה ובחר מהרשימה. אם כמה אירועים בשער קרו באותה שנה, כל אחד מהם נחשב נכון (אבל כל אירוע נספר פעם אחת). אפשר להשאיר שנים ריקות ולבדוק.</p>
     <ol class="timeline">${evs.map((slot, i) => `
       <li class="slot" data-slot="${i}">
         <span class="year">${esc(slotLabel(slot))}</span>
@@ -245,11 +249,13 @@ function renderLevel2(gate, evs) {
 
   app.querySelector('#check').onclick = e => {
     let correct = 0;
+    const used = new Set();
     evs.forEach((slot, i) => {
       const input = inputs[i];
       const picked = findByTitle(input.value);
-      // נכון אם נבחר אירוע מהשער שהתחיל באותה שנה
-      const right = !!picked && picked.y === slot.y && pool.includes(picked);
+      // נכון אם נבחר אירוע מהשער שהתחיל באותה שנה (ולא נספר כבר בשנה כפולה)
+      const right = !!picked && picked.y === slot.y && pool.includes(picked) && !used.has(picked.title);
+      if (right) used.add(picked.title);
       if (right) correct++;
       recordAnswer(slot, right);
       if (picked && !right) recordAnswer(picked, false);
