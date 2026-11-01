@@ -30,6 +30,8 @@ const fmtYear = y => y < 0 ? `${-y} לפנה"ס` : y < 1000 ? `${y} לספירה
 const fmtRange = (a, b) => a > 0 && b < 1000 ? `${a}–${b} לספירה` : `${fmtYear(a)}–${fmtYear(b)}`;
 const slotLabel = ev => ev.approx ? ev.label : ev.end ? fmtRange(ev.y, ev.end) : fmtYear(ev.y);
 const fullDate = ev => ev.label || slotLabel(ev);
+// שני אירועים מתאימים לאותה משבצת אם התאריך שמוצג על הציר זהה (1839 ≠ 1839–1861)
+const sameSlot = (a, b) => slotLabel(a) === slotLabel(b);
 const norm = s => s.replace(/["'״׳`()\-–:,.]/g, ' ').replace(/\s+/g, ' ').trim();
 const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -210,12 +212,12 @@ function renderLevel1(gate, evs) {
     if (empty && !confirm(`נשארו ${empty} שנים ריקות. לבדוק בכל זאת? (שנים ריקות ייספרו כטעות)`)) return;
     checked = true;
     let correct = 0;
-    const isRight = i => placed[i] !== null && byId(placed[i]).y === evs[i].y;
+    const isRight = i => placed[i] !== null && sameSlot(byId(placed[i]), evs[i]);
     // אירועים שלא מוקמו נכון – מוצגים כתיקון במשבצות השגויות של אותה שנה
     const missing = evs.filter(ev => !evs.some((slot, i) => placed[i] === ev.id && isRight(i)));
     fixes = evs.map((slot, i) => {
       if (isRight(i)) return null;
-      const k = missing.findIndex(ev => ev.y === slot.y);
+      const k = missing.findIndex(ev => sameSlot(ev, slot));
       return k >= 0 ? missing.splice(k, 1)[0].title : slot.title;
     });
     evs.forEach((slot, i) => {
@@ -254,7 +256,7 @@ function renderLevel2(gate, evs) {
       const input = inputs[i];
       const picked = findByTitle(input.value);
       // נכון אם נבחר אירוע מהשער שהתחיל באותה שנה (ולא נספר כבר בשנה כפולה)
-      const right = !!picked && picked.y === slot.y && pool.includes(picked) && !used.has(picked.title);
+      const right = !!picked && sameSlot(picked, slot) && pool.includes(picked) && !used.has(picked.title);
       if (right) used.add(picked.title);
       if (right) correct++;
       recordAnswer(slot, right);
@@ -264,7 +266,7 @@ function renderLevel2(gate, evs) {
       input.disabled = true;
       const fix = li.querySelector('.fix');
       if (!right) {
-        const sameYear = pool.filter(x => x.y === slot.y).map(x => x.title);
+        const sameYear = pool.filter(x => sameSlot(x, slot)).map(x => x.title);
         fix.hidden = false;
         fix.innerHTML = `✓ ${sameYear.map(esc).join(' / ')}` + (picked ? `<br><small>מה שבחרת: ${esc(fullDate(picked))}</small>` : '');
       }
